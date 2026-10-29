@@ -1,4 +1,4 @@
-name: Build Bekant Firmware
+name: Build Bekant Firmware & ESP Programmers
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-pic-firmware:
     name: Compile HEX via XC8
     runs-on: ubuntu-latest
 
@@ -38,4 +38,33 @@ jobs:
         with:
           name: bekantfirmware-hex
           path: firmware/dist/bekantfirmware.hex
+          if-no-files-found: error
+
+  build-esp8266:
+    name: Compile ESP8266 Programmer Binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/tmp sh
+          sudo mv /tmp/arduino-cli /usr/local/bin/
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266
+
+      - name: Compile ESP8266 Programmer
+        run: |
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --export-binaries tools/esp8266_programmer
+          ls -la tools/esp8266_programmer/build/esp8266.esp8266.nodemcuv2/
+
+      - name: Upload ESP8266 Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp8266-programmer-bin
+          path: tools/esp8266_programmer/build/esp8266.esp8266.nodemcuv2/*.bin
           if-no-files-found: error
