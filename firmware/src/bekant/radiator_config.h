@@ -20,10 +20,19 @@
  *   1590 + (73 - 70) * 100 = 1890 Ticks = 0x0762
  */
 
-// Konfigurierbare Mindesthöhe (Standard: 0x0762 = ca. 73 cm)
-#define RADIATOR_MIN_POS        ((int16_t)0x0762)
+// Absolutes Notfall-Minimum im entsperrten Zustand (0x0190 = 400 Ticks ≈ 65 cm)
+#define RADIATOR_UNLOCKED_POS   ((int16_t)0x0190)
 
-// Bremsweg-Reserve (0x0050 = ca. 80 Ticks = ca. 8 mm Bremsauslauf für sanftes Stoppen)
+// Standard-Startwert, falls das EEPROM komplett leer ist (0x0762 = 1890 Ticks ≈ 73 cm)
+#define RADIATOR_DEFAULT_POS    ((int16_t)0x0762)
+
+// Bremsweg-Reserve (0x0050 = 80 Ticks ≈ 8 mm Bremsauslauf)
 #define RADIATOR_BRAKE_MARGIN   ((int16_t)0x0050)
+
+// Toleranzfenster am Anschlag zum Entsperren per 3-Sek-Speichergeste (0x0064 = 100 Ticks ≈ 1 cm)
+#define RADIATOR_UNLOCK_WINDOW  ((int16_t)0x0064)
+
+// Liefert die aktuell gültige dynamische Heizkörper-Untergrenze zurück
+int16_t bui_get_radiator_min(void);
 
 #endif /* RADIATOR_CONFIG_H */

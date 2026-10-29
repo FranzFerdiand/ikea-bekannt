@@ -28,6 +28,21 @@ int16_t high_pos;
 int16_t low_pos;
 int16_t cur_pos; // accessed by bui_input() and bui_set_pos()
 
+static bool radiator_override_unlocked = false;
+
+int16_t bui_get_radiator_min(void) {
+    // 1. Wenn der Nutzer das Limit am Anschlag per 3-Sek-Geste entsperrt hat:
+    if (radiator_override_unlocked) {
+        return RADIATOR_UNLOCKED_POS;
+    }
+    // 2. Wenn im EEPROM ein unterer Punkt (low_pos) gespeichert ist, ist dieser das Hard-Limit:
+    if (low_pos > 0) {
+        return low_pos;
+    }
+    // 3. Fallback bei unbeschriebenem Chip:
+    return RADIATOR_DEFAULT_POS;
+}
+
 /* Memory positions are stored in EEPROM via the eeprom_defaults.c
  * helpers (raw register writes) rather than via __eeprom-qualified
  * variables, so XC8 does not consider mainline reads (bui_init) and
@@ -119,8 +134,8 @@ static void recall_memory(int16_t target) {
     }
 
     // Hard lower bound (radiator collision protection)
-    if (target < RADIATOR_MIN_POS) {
-        target = RADIATOR_MIN_POS;
+    if (target < bui_get_radiator_min()) {
+        target = bui_get_radiator_min();
     }
 
     int16_t diff = cur_pos - target;
@@ -131,7 +146,7 @@ static void recall_memory(int16_t target) {
         return;
     }
 
-    if (diff > 0 && cur_pos <= (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+    if (diff > 0 && cur_pos <= (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
         // Prevent starting downward motion if already at or below safe limit
         return;
     }
@@ -162,18 +177,12 @@ void bui_init(void) {
     low_pos  = (int16_t)eeprom_load16(EEPROM_ADDR_LOW_POS);
     high_pos = (int16_t)eeprom_load16(EEPROM_ADDR_HIGH_POS);
 
-    if (low_pos < 0 && high_pos < 0) {
+    if (low_pos < 0) {
         /* Fresh chip — never written. */
-        low_pos  = 0;
+        low_pos = 0;
+    }
+    if (high_pos < 0) {
         high_pos = 0;
-    } else {
-        // Enforce radiator lower limit on stored positions
-        if (low_pos > 0 && low_pos < RADIATOR_MIN_POS) {
-            low_pos = RADIATOR_MIN_POS;
-        }
-        if (high_pos > 0 && high_pos < RADIATOR_MIN_POS) {
-            high_pos = RADIATOR_MIN_POS;
-        }
     }
 }
 
@@ -189,7 +198,7 @@ void bui_input(INPUT_t input) {
                 bctrl_set_target(BCTRL_UP);
             } else if (input == INPUT_DOWN) {
                 // Prevent starting DOWN if already at or below radiator limit
-                if (cur_pos > (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+                if (cur_pos > (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
                     bui_state = BUI_DOWN;
                     bctrl_set_target(BCTRL_DOWN);
                 }
@@ -216,7 +225,7 @@ void bui_input(INPUT_t input) {
                 bui_state = BUI_STOP;
                 bctrl_set_target(BCTRL_STOP);
             } else if (input == INPUT_DOWN) {
-                if (cur_pos > (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+                if (cur_pos > (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
                     bui_state = BUI_DOWN;
                     bctrl_set_target(BCTRL_DOWN);
                 } else {
@@ -246,7 +255,7 @@ void bui_input(INPUT_t input) {
             } else if (input == INPUT_UP) {
                 bui_state = BUI_UP;
             } else if (input == INPUT_DOWN) {
-                if (cur_pos > (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+                if (cur_pos > (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
                     bui_state = BUI_DOWN;
                     bctrl_set_target(BCTRL_DOWN); // switch directions
                 } else {
@@ -282,7 +291,7 @@ void bui_set_pos(int16_t pos) {
 
     // Hard radiator collision limit: check if moving downwards (manual or memory)
     if ((bui_state == BUI_DOWN || bui_state == BUI_MEM_DOWN) &&
-        cur_pos <= (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+        cur_pos <= (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
         bui_state = BUI_STOP;
         bctrl_set_target(BCTRL_STOP);
         return;
@@ -368,14 +377,39 @@ void bui_service(void) {
  * @param save_pos new encoder value to store into persistent memory
  */
 void bui_save_pos(int16_t save_pos) {
-    if (save_pos < 0) {
-        // Encoder value indicates error state
+    if (save_pos <= 0) {
+        // Encoder value indicates error state or uninitialized
         return;
     }
 
-    // Do not allow saving positions lower than radiator limit
-    if (save_pos < RADIATOR_MIN_POS) {
-        save_pos = RADIATOR_MIN_POS;
+    int16_t current_min = bui_get_radiator_min();
+
+    // FALL 1: Tisch steht bereits direkt am unteren Limit -> Limit ENTSPERREN!
+    if (!radiator_override_unlocked &&
+        abs(save_pos - current_min) <= RADIATOR_UNLOCK_WINDOW) {
+        radiator_override_unlocked = true;
+        // Bestätigungs-Klicken der Relais als Feedback
+        bctrl_set_target(BCTRL_CLICK);
+        return;
+    }
+
+    // FALL 2: Limit war entsperrt und Nutzer speichert jetzt die neue (tiefere) Position -> Limit SPERREN!
+    if (radiator_override_unlocked) {
+        radiator_override_unlocked = false;
+        if (low_pos > 0 && (high_pos == 0 || save_pos < high_pos)) {
+            if (save_pos < RADIATOR_UNLOCKED_POS) {
+                save_pos = RADIATOR_UNLOCKED_POS;
+            }
+            low_pos = save_pos;
+            eeprom_store16(EEPROM_ADDR_LOW_POS, (uint16_t)low_pos);
+            bctrl_set_target(BCTRL_CLICK);
+            return;
+        }
+    }
+
+    // Do not allow saving positions lower than emergency minimum
+    if (save_pos < RADIATOR_UNLOCKED_POS) {
+        save_pos = RADIATOR_UNLOCKED_POS;
     }
 
     if (low_pos == 0 && high_pos == 0) {
@@ -434,6 +468,7 @@ void bui_factory_reset(void) {
 
     low_pos  = 0;
     high_pos = 0;
+    radiator_override_unlocked = false;
 
     bctrl_set_target(BCTRL_CLICK);
 }

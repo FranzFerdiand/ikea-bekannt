@@ -234,10 +234,11 @@ void bctrl_populate_cmd() {
 
         case BCTRL_DOWN_DECEL:
             if (decel_counter == 0) {
+                int16_t min_limit = bui_get_radiator_min();
                 // subtract overshoot from min
                 decel_target = encoder_min - BCTRL_DECEL_MARGIN;
-                if (decel_target < RADIATOR_MIN_POS) {
-                    decel_target = RADIATOR_MIN_POS;
+                if (decel_target < min_limit) {
+                    decel_target = min_limit;
                 }
             }
 
@@ -259,7 +260,7 @@ void bctrl_populate_cmd() {
 
         case BCTRL_DOWN:
             // Hardware-level radiator protection: stop if either leg enters the threshold
-            if (encoder_min <= (RADIATOR_MIN_POS + RADIATOR_BRAKE_MARGIN)) {
+            if (encoder_min <= (bui_get_radiator_min() + RADIATOR_BRAKE_MARGIN)) {
                 bctrl_set_target(BCTRL_STOP);
             }
 
