@@ -1,20 +1,36 @@
 /*
- * ESP32 Low-Voltage ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
+ * Low-Voltage ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
+ * Unterstützt automatisch sowohl ESP32 als auch ESP8266 (NodeMCU / D1 Mini)
  * Protokoll nach Microchip DS41397 (14-Bit Enhanced Midrange, LVP Key: 0x4D434850 "MCHP")
  * Logikpegel: 3,3 V
  *
- * Verkabelung:
+ * Verkabelung ESP32:
  * ESP32 GPIO 18 <-> ICSP Pad 1 (MCLR / VPP)
- * ESP32 3V3     <-> ICSP Pad 2 (VDD - NIEMALS 5V!)
+ * ESP32 3V3     <-> ICSP Pad 2 (VDD - ACHTUNG: NIEMALS an 5V / VIN!)
  * ESP32 GND     <-> ICSP Pad 3 (VSS)
  * ESP32 GPIO 19 <-> ICSP Pad 4 (PGD / ICSPDAT)
  * ESP32 GPIO 21 <-> ICSP Pad 5 (PGC / ICSPCLK)
+ *
+ * Verkabelung ESP8266 (NodeMCU / Wemos D1 Mini):
+ * ESP8266 D5 (GPIO 14) <-> ICSP Pad 1 (MCLR / VPP)
+ * ESP8266 3V3 (3.3V)   <-> ICSP Pad 2 (VDD - ACHTUNG: NIEMALS an 5V / VIN!)
+ * ESP8266 G   (GND)    <-> ICSP Pad 3 (VSS)
+ * ESP8266 D6 (GPIO 12) <-> ICSP Pad 4 (PGD / ICSPDAT)
+ * ESP8266 D7 (GPIO 13) <-> ICSP Pad 5 (PGC / ICSPCLK)
  */
 #include <Arduino.h>
 
-#define PIN_MCLR  18
-#define PIN_PGD   19
-#define PIN_PGC   21
+#if defined(ESP8266)
+  // Pinbelegung für ESP8266
+  #define PIN_MCLR  14  // Pin D5
+  #define PIN_PGD   12  // Pin D6
+  #define PIN_PGC   13  // Pin D7
+#else
+  // Pinbelegung für ESP32
+  #define PIN_MCLR  18
+  #define PIN_PGD   19
+  #define PIN_PGC   21
+#endif
 
 // ICSP Kommandos (6-Bit, LSB first) laut DS41397
 #define CMD_LOAD_CONFIG         0x00
@@ -127,6 +143,9 @@ void setup() {
 }
 
 void loop() {
+#if defined(ESP8266)
+    yield();
+#endif
     if (!Serial.available()) return;
     String line = Serial.readStringUntil('\n');
     line.trim();
@@ -135,7 +154,6 @@ void loop() {
         enterLVP();
         uint16_t id = readDeviceID();
         exitLVP();
-        // PIC16LF1938 hat Device-ID 0x2460 (Maske 0x3FE0 -> 0x2460, untere 5 Bits = Revision)
         Serial.printf("OK ID:0x%04X\n", id);
     }
     else if (line == "ERASE") {
@@ -145,7 +163,6 @@ void loop() {
         Serial.println("OK ERASED");
     }
     else if (line.startsWith("WPROG:")) {
-        // Format: WPROG:<hex_word_addr>:<hex_word_val> (Schreibt einzelnes 14-Bit Wort)
         int p1 = line.indexOf(':');
         int p2 = line.indexOf(':', p1 + 1);
         uint16_t addr = strtol(line.substring(p1 + 1, p2).c_str(), NULL, 16);
@@ -163,7 +180,7 @@ void loop() {
         sendCmd(CMD_LOAD_DATA_PROG);
         sendData14(val);
         sendCmd(CMD_BEGIN_INT_TIMED_PRG);
-        delay(6); // T_PINT = 2.5 ms Prog, 5 ms Config
+        delay(6);
         exitLVP();
         Serial.println("OK");
     }
