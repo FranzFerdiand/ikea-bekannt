@@ -6,11 +6,11 @@ Dieses Projekt enthält alle benötigten Skripte, Quellcode-Modifikationen und D
 
 ## Projektübersicht & Ordnerstruktur
 
-* [`BekantFirmware/`](BekantFirmware/): Das Open-Source-Firmware-Repository (Fork GuentherMair / ivanwick).
-  * [`BekantFirmware/src/bekant/radiator_config.h`](BekantFirmware/src/bekant/radiator_config.h): Definition von `RADIATOR_MIN_POS` und Bremsreserve.
-  * [`BekantFirmware/src/bekant/bui.c`](BekantFirmware/src/bekant/bui.c): Verhindert Abwärtsfahrt unter das Limit und blockiert Speichern unzulässiger Memory-Positionen.
-  * [`BekantFirmware/src/bekant/bctrl.c`](BekantFirmware/src/bekant/bctrl.c): Hardwarenaher Sanft-Stopp (LIN-Bus Bremssequenz `0x87 -> 0x84 -> 0xFC`).
-  * [`BekantFirmware/src/configuration_bits.c`](BekantFirmware/src/configuration_bits.c): Konfiguriert mit `LVP = ON` für 3,3V ESP32 Flashen.
+* [**`BekantFirmware/`**](https://github.com/FranzFerdiand/BekantFirmware): Der persönliche Fork von [`GuentherMair/BekantFirmware`](https://github.com/GuentherMair/BekantFirmware), als Git-Submodule eingebunden.
+  * [`BekantFirmware/src/bekant/radiator_config.h`](https://github.com/FranzFerdiand/BekantFirmware/blob/master/src/bekant/radiator_config.h): Definition von `RADIATOR_MIN_POS` und Bremsreserve.
+  * [`BekantFirmware/src/bekant/bui.c`](https://github.com/FranzFerdiand/BekantFirmware/blob/master/src/bekant/bui.c): Verhindert Abwärtsfahrt unter das Limit und blockiert Speichern unzulässiger Memory-Positionen.
+  * [`BekantFirmware/src/bekant/bctrl.c`](https://github.com/FranzFerdiand/BekantFirmware/blob/master/src/bekant/bctrl.c): Hardwarenaher Sanft-Stopp (LIN-Bus Bremssequenz `0x87 -> 0x84 -> 0xFC`).
+  * [`BekantFirmware/src/configuration_bits.c`](https://github.com/FranzFerdiand/BekantFirmware/blob/master/src/configuration_bits.c): Konfiguriert mit `LVP = ON` für 3,3V ESP32 Flashen.
 * [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino): Arduino-Sketch für den ESP32 (implementiert Microchip DS41397 LVP Protokoll).
 * [`tools/flash_bekant.py`](tools/flash_bekant.py): Python 3 Flashing-Tool zum Übertragen der `.hex`-Datei über den ESP32 auf den PIC.
 
@@ -22,7 +22,7 @@ Formel: **1 cm ≈ 100 Ticks** (Standard-Sitzhöhe ca. 70 cm = 1590 Ticks).
 
 $$\text{Ziel-Ticks} = 1590 + (\text{Wunsch-Minimalhöhe in cm} - 70) \times 100$$
 
-Passe bei Bedarf die Werte in [`BekantFirmware/src/bekant/radiator_config.h`](BekantFirmware/src/bekant/radiator_config.h) an:
+Passe bei Bedarf die Werte in [`BekantFirmware/src/bekant/radiator_config.h`](https://github.com/FranzFerdiand/BekantFirmware/blob/master/src/bekant/radiator_config.h) an:
 ```c
 #define RADIATOR_MIN_POS        ((int16_t)0x0762) // ca. 73 cm Tischhöhe
 #define RADIATOR_BRAKE_MARGIN   ((int16_t)0x0050) // ca. 8 mm Bremsreserve
