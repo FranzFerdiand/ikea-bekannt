@@ -1,0 +1,10 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Local build artifacts
+tools/esp8266_programmer/build/
+tools/esp32_programmer/build/
+firmware/build/
+firmware/dist/
+firmware/dfp/

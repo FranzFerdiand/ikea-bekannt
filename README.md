@@ -72,15 +72,33 @@ Beide Mikrocontroller (ESP32 und ESP8266) arbeiten nativ mit 3,3 V Logikpegeln u
 
 ---
 
+### Der 9V-Batterie-Trick beim ALLERERSTEN Flashen
+
+IKEA liefert den PIC16LF1938 ab Werk mit gesetzter Sperre **`LVP = OFF`** (Low-Voltage Programming deaktiviert) aus. Dadurch ignoriert der fabrikneue Chip reine 3,3V-Programmierbefehle am MCLR-Pin.
+
+Mit einer gewöhnlichen **9V-Blockbatterie** lässt sich dieser Schutz jedoch in Sekunden knacken (High-Voltage ICSP Entry), ohne einen teuren PICkit-Programmer kaufen zu müssen:
+
+1. **Batterie-Minus (GND / Minuspol):** Verbinde den Minuspol der 9V-Batterie mit **GND** (ESP GND bzw. Pad 3 des Bedienteils).
+2. **Batterie-Plus (+9V):** 
+   * **Nur beim ersten Flashen:** Trenne Pin D5 / GPIO 18 kurz ab und halte den Pluspol der 9V-Batterie (idealerweise über einen 1kΩ–10kΩ Schutzwiderstand) direkt an **Pad 1 (MCLR)**.
+   * Alternativ: Wenn Pin D5 angeschlossen bleibt, eine kleine Diode (z. B. 1N4148) in Reihe zwischen D5 und Pad 1 schalten (Kathode an Pad 1), damit die 9V nicht in den ESP-Ausgang zurückfließen.
+3. Sobald der Chip gelöscht und unsere Firmware geflasht wurde, ist **`LVP = ON` dauerhaft aktiv**!
+4. **Ab dem 2. Flashen:** Du brauchst die 9V-Batterie nie wieder! Pin D5 (ESP8266) bzw. GPIO 18 (ESP32) steuert MCLR direkt mit 3,3 V über den genormten Microchip LVP-Key `0x4D434850` ("MCHP").
+
+---
+
 ## 4. Verbindung testen & Flashen
 
-1. Öffne nach dem Flashen des ESP den Arduino Seriellen Monitor (115200 Baud, Newline) und tippe `ID` ein:
+1. **Test im Seriellen Monitor:** Öffne nach dem Flashen des ESP den Seriellen Monitor (115200 Baud, Newline) und sende `ID`:
    * Erwartete Antwort: `OK ID:0x246x` (Kennung für `PIC16LF1938`).
-2. Flashe anschließend die `.hex`-Datei über Python:
+2. **Flashen über Python:** Starte das Skript:
 ```bash
-python tools/flash_bekant.py COM3 bin/bekantfirmware.hex
+python tools/flash_bekant.py COM12 bin/bekantfirmware.hex
 ```
-*(Ersetze `COM3` durch deinen COM-Port).*
+*(Ersetze `COM12` durch deinen COM-Port).*
+* Das Skript wartet bis zu 90 Sekunden auf die Chip-Erkennung.
+* Wenn der Chip noch auf Werkseinstellungen steht, halte die 9V an Pad 1.
+* Wenn bereits unsere Firmware (mit `LVP = ON`) geflasht ist und D5 verbunden ist, wird der Chip sofort erkannt und in ca. 12–15 Sekunden automatisch geflasht!
 
 ---
 

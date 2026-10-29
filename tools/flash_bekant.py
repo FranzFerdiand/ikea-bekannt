@@ -41,7 +41,7 @@ def main():
     ser = serial.Serial(port, 115200, timeout=1.5)
     time.sleep(0.5)
 
-    print("[*] BEREIT! Halte jetzt die 9V an Pin 1 (MCLR). Wartezeit bis zu 90s...")
+    print("[*] BEREIT! Suche PIC16LF1938 via D5 (LVP 3.3V) oder 9V an Pad 1 (MCLR). Wartezeit bis zu 90s...")
     valid = False
     start_wait = time.time()
     last_status = ""
@@ -71,7 +71,7 @@ def main():
     print("    ->", erase_ack)
 
     total = len(words)
-    print(f"[*] FLASHE {total} WÖRTER (High-Speed ca. 12-15s)... BITTE 9V WEITER FESTHALTEN!")
+    print(f"[*] FLASHE {total} WÖRTER (High-Speed ca. 12-15s)...")
     t_start = time.time()
     for idx, (w_addr, w_val) in enumerate(sorted(words.items()), 1):
         if w_val == 0x3FFF:
@@ -98,7 +98,6 @@ def main():
 
     duration = time.time() - t_start
     print(f"\n\n[+] ERFOLGREICH GEFLASHED in {duration:.1f}s!")
-    print("[+] DU KANNST DAS 9V-KABEL JETZT ABNEHMEN!")
     ser.close()
 
 if __name__ == "__main__":

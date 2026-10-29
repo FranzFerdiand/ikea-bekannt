@@ -1,8 +1,8 @@
 /*
- * Low-Voltage ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
- * Unterstützt automatisch sowohl ESP32 als auch ESP8266 (NodeMCU / D1 Mini)
- * Protokoll nach Microchip DS41397 (14-Bit Enhanced Midrange, LVP Key: 0x4D434850 "MCHP")
- * Logikpegel: 3,3 V
+ * ESP32 / ESP8266 ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
+ * Optimiert für schnelles sequentielles Schreiben (High-Voltage 9V & 3.3V LVP).
+ * Unterstützt Pin GPIO 18 (ESP32) / Pin D5 (ESP8266) für MCLR mit 32-Bit LVP-Key ("MCHP")
+ * sowie die 9V-Batterie-Methode zum Knacken der werkseitigen LVP=OFF Sperre.
  *
  * Verkabelung ESP32:
  * ESP32 GPIO 18 <-> ICSP Pad 1 (MCLR / VPP)
@@ -21,18 +21,16 @@
 #include <Arduino.h>
 
 #if defined(ESP8266)
-  // Pinbelegung für ESP8266
   #define PIN_MCLR  14  // Pin D5
   #define PIN_PGD   12  // Pin D6
   #define PIN_PGC   13  // Pin D7
 #else
-  // Pinbelegung für ESP32
-  #define PIN_MCLR  18
-  #define PIN_PGD   19
-  #define PIN_PGC   21
+  #define PIN_MCLR  18  // GPIO 18
+  #define PIN_PGD   19  // GPIO 19
+  #define PIN_PGC   21  // GPIO 21
 #endif
 
-// ICSP Kommandos (6-Bit, LSB first) laut DS41397
+// ICSP Kommandos laut DS41397
 #define CMD_LOAD_CONFIG         0x00
 #define CMD_LOAD_DATA_PROG      0x02
 #define CMD_LOAD_DATA_DATA      0x03
@@ -43,6 +41,8 @@
 #define CMD_BEGIN_INT_TIMED_PRG 0x08
 #define CMD_BULK_ERASE_PROG     0x09
 #define CMD_BULK_ERASE_DATA     0x0B
+
+int32_t current_pc = -1;
 
 void sendBit(uint8_t b) {
     digitalWrite(PIN_PGC, HIGH);
@@ -72,7 +72,6 @@ void sendCmd(uint8_t cmd) {
 
 void sendData14(uint16_t data) {
     pinMode(PIN_PGD, OUTPUT);
-    // 1 Start-Bit (0) + 14 Daten-Bits (LSB first) + 1 Stop-Bit (0) = 16 Takte
     uint16_t frame = (data & 0x3FFF) << 1;
     for (int i = 0; i < 16; i++) {
         sendBit((frame >> i) & 0x01);
@@ -90,19 +89,23 @@ uint16_t readData14() {
     return (raw >> 1) & 0x3FFF;
 }
 
-void enterLVP() {
+void enterProgMode() {
     pinMode(PIN_MCLR, OUTPUT);
     pinMode(PIN_PGC, OUTPUT);
     pinMode(PIN_PGD, OUTPUT);
 
     digitalWrite(PIN_PGC, LOW);
     digitalWrite(PIN_PGD, LOW);
+
+    // MCLR high -> low -> 32-Bit Key "MCHP" (0x4D434850)
+    // Wenn LVP aktiv ist (oder bereits geflasht wurde), schaltet dies den Chip direkt in Prog-Mode.
+    // Wenn 9V manuell anliegen, toleriert die Diode/Widerstand dies bzw. der Chip ist per HV im Prog-Mode.
     digitalWrite(PIN_MCLR, HIGH);
     delay(10);
     digitalWrite(PIN_MCLR, LOW);
     delayMicroseconds(500);
 
-    // 32-Bit LVP Key 0x4D434850 ("MCHP") LSB first einschieben + 1 Extratakt
+    // 32-Bit LVP Key 0x4D434850 ("MCHP") LSB first + 1 Extratakt (Microchip DS41397)
     uint32_t key = 0x4D434850;
     for (int i = 0; i < 32; i++) {
         sendBit((key >> i) & 0x01);
@@ -111,55 +114,86 @@ void enterLVP() {
     delay(5);
 }
 
-void exitLVP() {
+void exitProgMode() {
     pinMode(PIN_PGD, INPUT);
     pinMode(PIN_PGC, INPUT);
+    pinMode(PIN_MCLR, OUTPUT);
     digitalWrite(PIN_MCLR, HIGH);
+    current_pc = -1;
+}
+
+void seekAddress(uint16_t target) {
+    if (target >= 0x8000) {
+        if (current_pc < 0x8000 || current_pc > (int32_t)target) {
+            sendCmd(CMD_LOAD_CONFIG);
+            sendData14(0x3FFF);
+            current_pc = 0x8000;
+        }
+        while (current_pc < (int32_t)target) {
+            sendCmd(CMD_INC_ADDRESS);
+            current_pc++;
+        }
+    } else {
+        if (current_pc < 0 || current_pc > (int32_t)target || current_pc >= 0x8000) {
+            sendCmd(CMD_RESET_ADDRESS);
+            current_pc = 0;
+        }
+        while (current_pc < (int32_t)target) {
+            sendCmd(CMD_INC_ADDRESS);
+            current_pc++;
+        }
+    }
 }
 
 uint16_t readDeviceID() {
+    enterProgMode();
     sendCmd(CMD_LOAD_CONFIG);
-    sendData14(0x0000); // Setzt PC auf 0x8000
+    sendData14(0x0000);
     for (int i = 0; i < 6; i++) {
-        sendCmd(CMD_INC_ADDRESS); // Vorrücken auf 0x8006 (Device ID Register)
+        sendCmd(CMD_INC_ADDRESS);
     }
     sendCmd(CMD_READ_DATA_PROG);
-    return readData14();
+    uint16_t id = readData14();
+    current_pc = 0x8006;
+    return id;
 }
 
 void bulkErase() {
+    enterProgMode();
     sendCmd(CMD_LOAD_CONFIG);
     sendData14(0x3FFF);
     sendCmd(CMD_BULK_ERASE_PROG);
-    delay(10); // T_ERAB = max 10 ms
+    delay(15);
     sendCmd(CMD_BULK_ERASE_DATA);
-    delay(10);
+    delay(15);
+    current_pc = -1;
 }
 
 void setup() {
     Serial.begin(115200);
     pinMode(PIN_MCLR, OUTPUT);
     digitalWrite(PIN_MCLR, HIGH);
+    pinMode(PIN_PGC, OUTPUT);
+    pinMode(PIN_PGD, OUTPUT);
+    digitalWrite(PIN_PGC, LOW);
+    digitalWrite(PIN_PGD, LOW);
 }
 
 void loop() {
 #if defined(ESP8266)
     yield();
 #endif
+
     if (!Serial.available()) return;
     String line = Serial.readStringUntil('\n');
     line.trim();
 
     if (line == "ID") {
-        enterLVP();
         uint16_t id = readDeviceID();
-        exitLVP();
         Serial.printf("OK ID:0x%04X\n", id);
     }
     else if (line == "ERASE") {
-        enterLVP();
         bulkErase();
-        exitLVP();
         Serial.println("OK ERASED");
     }
     else if (line.startsWith("WPROG:")) {
@@ -168,20 +202,19 @@ void loop() {
         uint16_t addr = strtol(line.substring(p1 + 1, p2).c_str(), NULL, 16);
         uint16_t val  = strtol(line.substring(p2 + 1).c_str(), NULL, 16);
 
-        enterLVP();
-        if (addr >= 0x8000) {
-            sendCmd(CMD_LOAD_CONFIG);
-            sendData14(0x3FFF);
-            for (uint16_t a = 0x8000; a < addr; a++) sendCmd(CMD_INC_ADDRESS);
-        } else {
-            sendCmd(CMD_RESET_ADDRESS);
-            for (uint16_t a = 0; a < addr; a++) sendCmd(CMD_INC_ADDRESS);
-        }
+        enterProgMode();
+        seekAddress(addr);
         sendCmd(CMD_LOAD_DATA_PROG);
         sendData14(val);
         sendCmd(CMD_BEGIN_INT_TIMED_PRG);
-        delay(6);
-        exitLVP();
+        delay(4); // T_PINT: typisch 2.5ms
+        sendCmd(CMD_INC_ADDRESS);
+        current_pc++;
+
         Serial.println("OK");
+    }
+    else if (line == "DONE") {
+        exitProgMode();
+        Serial.println("OK DONE");
     }
 }

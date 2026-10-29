@@ -1,12 +1,14 @@
 /*
  * ESP8266 ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
- * Optimiert für schnelles sequentielles Schreiben (High-Voltage 9V & LVP).
+ * Optimiert für schnelles sequentielles Schreiben (High-Voltage 9V & 3.3V LVP).
+ * Unterstützt Pin D5 (GPIO 14) für MCLR mit 32-Bit LVP-Key ("MCHP") sowie
+ * die 9V-Batterie-Methode zum Knacken der werkseitigen LVP=OFF Sperre.
  */
 #include <Arduino.h>
 
-#define PIN_MCLR  14  // Pin D5 (bleibt bei 9V frei)
-#define PIN_PGD   12  // Pin D6
-#define PIN_PGC   13  // Pin D7
+#define PIN_MCLR  14  // Pin D5 (MCLR / VPP)
+#define PIN_PGD   12  // Pin D6 (PGD / ICSPDAT)
+#define PIN_PGC   13  // Pin D7 (PGC / ICSPCLK)
 
 // ICSP Kommandos laut DS41397
 #define CMD_LOAD_CONFIG         0x00
@@ -68,15 +70,36 @@ uint16_t readData14() {
 }
 
 void enterProgMode() {
+    pinMode(PIN_MCLR, OUTPUT);
     pinMode(PIN_PGC, OUTPUT);
     pinMode(PIN_PGD, OUTPUT);
+
     digitalWrite(PIN_PGC, LOW);
     digitalWrite(PIN_PGD, LOW);
+
+    // MCLR high -> low -> 32-Bit Key "MCHP" (0x4D434850)
+    // Wenn LVP aktiv ist (oder bereits geflasht wurde), schaltet dies den Chip direkt in Prog-Mode.
+    // Wenn 9V manuell anliegen, toleriert die Diode/Widerstand dies bzw. der Chip ist per HV im Prog-Mode.
+    digitalWrite(PIN_MCLR, HIGH);
+    delay(10);
+    digitalWrite(PIN_MCLR, LOW);
+    delayMicroseconds(500);
+
+    // 32-Bit LVP Key 0x4D434850 ("MCHP") LSB first + 1 Extratakt (Microchip DS41397)
+    uint32_t key = 0x4D434850;
+    for (int i = 0; i < 32; i++) {
+        sendBit((key >> i) & 0x01);
+    }
+    sendBit(0);
+    delay(5);
 }
 
 void exitProgMode() {
     pinMode(PIN_PGD, INPUT);
     pinMode(PIN_PGC, INPUT);
+    // Pin MCLR wieder freigeben / HIGH für Normalbetrieb
+    pinMode(PIN_MCLR, OUTPUT);
+    digitalWrite(PIN_MCLR, HIGH);
     current_pc = -1;
 }
 
@@ -129,6 +152,8 @@ void bulkErase() {
 
 void setup() {
     Serial.begin(115200);
+    pinMode(PIN_MCLR, OUTPUT);
+    digitalWrite(PIN_MCLR, HIGH);
     pinMode(PIN_PGC, OUTPUT);
     pinMode(PIN_PGD, OUTPUT);
     digitalWrite(PIN_PGC, LOW);
