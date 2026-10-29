@@ -1,0 +1,22 @@
+#include "test_sfr_stubs.h"
+uint8_t __ANSELB, __TRISB, __LATC, __TRISC, __PORTC, __PORTB, __TMR4;
+uint8_t __SPBRGL, __SPBRGH, __RCREG, __TXREG, __TRISC6, __TRISC7;
+uint8_t __EEADR, __EEDATA, __EECON1, __EECON2;
+uint8_t __T2CON, __PR2, __PIE1, __PIR1, __T4CON, __PR4, __PIE3, __PIR3;
+uint8_t __OSCCON, __RCSTA, __TXSTA, __BAUDCON, __INTCON;
+PORTBbits_t __PORTBbits;
+TRISCbits_t __TRISCbits;
+T2CONbits_t __T2CONbits;
+PR2bits_t __PR2bits;
+PIE1bits_t __PIE1bits;
+PIR1bits_t __PIR1bits;
+T4CONbits_t __T4CONbits;
+PR4bits_t __PR4bits;
+PIE3bits_t __PIE3bits;
+PIR3bits_t __PIR3bits;
+EECON1bits_t __EECON1bits;
+OSCCONbits_t __OSCCONbits;
+RCSTAbits_t __RCSTAbits;
+TXSTAbits_t __TXSTAbits;
+BAUDCONbits_t __BAUDCONbits;
+INTCONbits_t __INTCONbits;

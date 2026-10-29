@@ -1,0 +1,6 @@
+.DS_Store
+MPLABXLog.xml
+build/
+dfp/
+dist/
+src/*.d

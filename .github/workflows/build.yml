@@ -1,0 +1,41 @@
+name: Build Bekant Firmware
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compile HEX via XC8
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Microchip XC8 Compiler
+        uses: usimd/setup-xc-action@v1
+        with:
+          compiler: 'xc8'
+          version: '2.50'
+
+      - name: Build Firmware
+        working-directory: firmware
+        run: |
+          make
+
+      - name: Verify HEX Output
+        working-directory: firmware
+        run: |
+          ls -la dist/
+          test -f dist/bekantfirmware.hex
+
+      - name: Upload HEX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bekantfirmware-hex
+          path: firmware/dist/bekantfirmware.hex
+          if-no-files-found: error
