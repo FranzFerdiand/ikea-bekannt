@@ -1,95 +1,111 @@
 /*
  * ESP32 / ESP8266 ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
- * Optimiert für schnelles sequentielles Schreiben (High-Voltage 9V & 3.3V LVP).
- * Unterstützt Pin GPIO 18 (ESP32) / Pin D5 (ESP8266) für MCLR mit 32-Bit LVP-Key ("MCHP")
- * sowie die 9V-Batterie-Methode zum Knacken der werkseitigen LVP=OFF Sperre.
- *
- * Verkabelung ESP32:
- * ESP32 GPIO 18 <-> ICSP Pad 1 (MCLR / VPP)
- * ESP32 3V3     <-> ICSP Pad 2 (VDD - ACHTUNG: NIEMALS an 5V / VIN!)
- * ESP32 GND     <-> ICSP Pad 3 (VSS)
- * ESP32 GPIO 19 <-> ICSP Pad 4 (PGD / ICSPDAT)
- * ESP32 GPIO 21 <-> ICSP Pad 5 (PGC / ICSPCLK)
- *
- * Verkabelung ESP8266 (NodeMCU / Wemos D1 Mini):
- * ESP8266 D5 (GPIO 14) <-> ICSP Pad 1 (MCLR / VPP)
- * ESP8266 3V3 (3.3V)   <-> ICSP Pad 2 (VDD - ACHTUNG: NIEMALS an 5V / VIN!)
- * ESP8266 G   (GND)    <-> ICSP Pad 3 (VSS)
- * ESP8266 D6 (GPIO 12) <-> ICSP Pad 4 (PGD / ICSPDAT)
- * ESP8266 D7 (GPIO 13) <-> ICSP Pad 5 (PGC / ICSPCLK)
+ * 
+ * Basierend auf Microchip DS41397B (PIC16(L)F193X Memory Programming Specification).
+ * Features:
+ * - 3.3V Low-Voltage Programming (LVP) mit 32-Bit Key "MCHP" (0x4D434850)
+ * - 32-Wort Zeilenprogrammierung (WROW32) für ultraschnelles, sicheres Flashen (~15-20s)
+ * - Einzelwort-Konfigurationsprogrammierung (WCONFIG) für CONFIG1 (0x8007) & CONFIG2 (0x8008)
+ * - Smartes Program-Counter-Tracking (kein repetitives Durchtakten ab 0x0000)
+ * - Unterstützt ESP32 und ESP8266 (automatische Pin- und Watchdog-Anpassung)
+ * 
+ * Pinbelegung ESP32:
+ * - GPIO 18 <-> ICSP Pad 1 (MCLR / VPP)
+ * - 3V3     <-> ICSP Pad 2 (VDD / 3.3V - NIEMALS 5V/VIN!)
+ * - GND     <-> ICSP Pad 3 (VSS / Masse)
+ * - GPIO 19 <-> ICSP Pad 4 (PGD / ICSPDAT)
+ * - GPIO 21 <-> ICSP Pad 5 (PGC / ICSPCLK)
+ * 
+ * Pinbelegung ESP8266 (NodeMCU / D1 Mini):
+ * - D5 (GPIO 14) <-> ICSP Pad 1 (MCLR / VPP)
+ * - 3V3 (3.3V)   <-> ICSP Pad 2 (VDD / 3.3V - NIEMALS 5V/VIN!)
+ * - G (GND)      <-> ICSP Pad 3 (VSS / Masse)
+ * - D6 (GPIO 12) <-> ICSP Pad 4 (PGD / ICSPDAT)
+ * - D7 (GPIO 13) <-> ICSP Pad 5 (PGC / ICSPCLK)
  */
 #include <Arduino.h>
 
 #if defined(ESP8266)
-  #define PIN_MCLR  14  // Pin D5
-  #define PIN_PGD   12  // Pin D6
-  #define PIN_PGC   13  // Pin D7
+  #define PIN_MCLR  14  // Pin D5 (GPIO 14 -> MCLR / VPP)
+  #define PIN_PGD   12  // Pin D6 (GPIO 12 -> PGD / ICSPDAT)
+  #define PIN_PGC   13  // Pin D7 (GPIO 13 -> PGC / ICSPCLK)
 #else
-  #define PIN_MCLR  18  // GPIO 18
-  #define PIN_PGD   19  // GPIO 19
-  #define PIN_PGC   21  // GPIO 21
+  #define PIN_MCLR  18  // ESP32 GPIO 18 -> MCLR / VPP
+  #define PIN_PGD   19  // ESP32 GPIO 19 -> PGD / ICSPDAT
+  #define PIN_PGC   21  // ESP32 GPIO 21 -> PGC / ICSPCLK
 #endif
 
-// ICSP Kommandos laut DS41397
-#define CMD_LOAD_CONFIG         0x00
-#define CMD_LOAD_DATA_PROG      0x02
-#define CMD_LOAD_DATA_DATA      0x03
-#define CMD_READ_DATA_PROG      0x04
-#define CMD_READ_DATA_DATA      0x05
-#define CMD_INC_ADDRESS         0x06
-#define CMD_RESET_ADDRESS       0x16
-#define CMD_BEGIN_INT_TIMED_PRG 0x08
-#define CMD_BULK_ERASE_PROG     0x09
-#define CMD_BULK_ERASE_DATA     0x0B
+// ICSP Kommandos laut Microchip DS41397B
+#define CMD_LOAD_CONFIG         0x00  // Setzt PC auf 0x8000 (erfordert 16-Bit Dummy)
+#define CMD_LOAD_DATA_PROG      0x02  // Lädt 14-Bit Latch-Wort
+#define CMD_READ_DATA_PROG      0x04  // Liest 14-Bit Wort
+#define CMD_INC_ADDRESS         0x06  // Erhöht PC um 1
+#define CMD_BEGIN_INT_TIMED_PRG 0x08  // Brennt Zeile / Wort
+#define CMD_BULK_ERASE_PROG     0x09  // Löscht Flash & Config
+#define CMD_BULK_ERASE_DATA     0x0B  // Löscht Data EEPROM
+#define CMD_RESET_ADDRESS       0x16  // Setzt PC zurück auf 0x0000
 
-int32_t current_pc = -1;
+static bool in_prog_mode = false;
+static uint16_t current_pc = 0xFFFF; // Aktuelle Position des PIC-Programmzählers
 
-void sendBit(uint8_t b) {
-    digitalWrite(PIN_PGC, HIGH);
-    digitalWrite(PIN_PGD, b ? HIGH : LOW);
-    delayMicroseconds(2);
-    digitalWrite(PIN_PGC, LOW);
-    delayMicroseconds(2);
-}
-
-uint8_t readBit() {
-    uint8_t b = 0;
-    digitalWrite(PIN_PGC, HIGH);
-    delayMicroseconds(2);
-    b = digitalRead(PIN_PGD);
-    digitalWrite(PIN_PGC, LOW);
-    delayMicroseconds(2);
-    return b;
-}
-
-void sendCmd(uint8_t cmd) {
+// 1. Sendet 6 Kommando-Bits (LSB first, Übernahme bei fallender Flanke)
+void icsp_send_cmd(uint8_t cmd) {
     pinMode(PIN_PGD, OUTPUT);
     for (int i = 0; i < 6; i++) {
-        sendBit((cmd >> i) & 0x01);
+        digitalWrite(PIN_PGD, (cmd >> i) & 0x01);
+        digitalWrite(PIN_PGC, HIGH);
+        delayMicroseconds(3);
+        digitalWrite(PIN_PGC, LOW);
+        delayMicroseconds(3);
     }
-    delayMicroseconds(3);
+    digitalWrite(PIN_PGD, LOW);
+    delayMicroseconds(5); // Tdly1 (min 1 µs)
 }
 
-void sendData14(uint16_t data) {
+// 2. Sendet 16 Daten-Bits: Start(0) + 14 Bit Daten (LSB first) + Stop(0)
+void icsp_send_data(uint16_t data14) {
+    uint16_t frame = (data14 & 0x3FFF) << 1;
     pinMode(PIN_PGD, OUTPUT);
-    uint16_t frame = (data & 0x3FFF) << 1;
     for (int i = 0; i < 16; i++) {
-        sendBit((frame >> i) & 0x01);
+        digitalWrite(PIN_PGD, (frame >> i) & 0x01);
+        digitalWrite(PIN_PGC, HIGH);
+        delayMicroseconds(3);
+        digitalWrite(PIN_PGC, LOW);
+        delayMicroseconds(3);
     }
-    delayMicroseconds(3);
+    digitalWrite(PIN_PGD, LOW);
+    delayMicroseconds(5);
 }
 
-uint16_t readData14() {
+// 3. Liest 16 Daten-Bits: Start(0) + 14 Bit Daten (LSB first) + Stop(0)
+uint16_t icsp_read_data() {
     pinMode(PIN_PGD, INPUT);
-    uint16_t raw = 0;
-    for (int i = 0; i < 16; i++) {
-        if (readBit()) raw |= (1 << i);
-    }
     delayMicroseconds(3);
-    return (raw >> 1) & 0x3FFF;
+
+    uint16_t data = 0;
+    for (int i = 0; i < 16; i++) {
+        digitalWrite(PIN_PGC, HIGH);
+        delayMicroseconds(3);
+        uint8_t bit_val = digitalRead(PIN_PGD);
+        digitalWrite(PIN_PGC, LOW);
+        delayMicroseconds(3);
+
+        if (i >= 1 && i <= 14) {
+            if (bit_val) {
+                data |= (1 << (i - 1));
+            }
+        }
+    }
+    pinMode(PIN_PGD, OUTPUT);
+    digitalWrite(PIN_PGD, LOW);
+    delayMicroseconds(5);
+    return data & 0x3FFF;
 }
 
-void enterProgMode() {
+// Betritt den 3.3V LVP-Modus stabil (nur wenn noch nicht im ProgMode)
+void ensureProgMode() {
+    if (in_prog_mode) return;
+
     pinMode(PIN_MCLR, OUTPUT);
     pinMode(PIN_PGC, OUTPUT);
     pinMode(PIN_PGD, OUTPUT);
@@ -97,21 +113,29 @@ void enterProgMode() {
     digitalWrite(PIN_PGC, LOW);
     digitalWrite(PIN_PGD, LOW);
 
-    // MCLR high -> low -> 32-Bit Key "MCHP" (0x4D434850)
-    // Wenn LVP aktiv ist (oder bereits geflasht wurde), schaltet dies den Chip direkt in Prog-Mode.
-    // Wenn 9V manuell anliegen, toleriert die Diode/Widerstand dies bzw. der Chip ist per HV im Prog-Mode.
+    // Sauberer Reset-Puls auf MCLR
     digitalWrite(PIN_MCLR, HIGH);
-    delay(10);
+    delay(20);
     digitalWrite(PIN_MCLR, LOW);
-    delayMicroseconds(500);
+    delay(2); // Tents / Tenth (min 250 µs)
 
-    // 32-Bit LVP Key 0x4D434850 ("MCHP") LSB first + 1 Extratakt (Microchip DS41397)
-    uint32_t key = 0x4D434850;
+    // 32-Bit LVP Key "MCHP" (0x4D434850) LSB first + 1 Extratakt
+    uint32_t key = 0x4D434850UL;
     for (int i = 0; i < 32; i++) {
-        sendBit((key >> i) & 0x01);
+        digitalWrite(PIN_PGD, (key >> i) & 0x01);
+        digitalWrite(PIN_PGC, HIGH);
+        delayMicroseconds(3);
+        digitalWrite(PIN_PGC, LOW);
+        delayMicroseconds(3);
     }
-    sendBit(0);
+    digitalWrite(PIN_PGD, LOW);
+    digitalWrite(PIN_PGC, HIGH);
+    delayMicroseconds(3);
+    digitalWrite(PIN_PGC, LOW);
     delay(5);
+
+    in_prog_mode = true;
+    current_pc = 0x0000;
 }
 
 void exitProgMode() {
@@ -119,76 +143,110 @@ void exitProgMode() {
     pinMode(PIN_PGC, INPUT);
     pinMode(PIN_MCLR, OUTPUT);
     digitalWrite(PIN_MCLR, HIGH);
-    current_pc = -1;
+    in_prog_mode = false;
+    current_pc = 0xFFFF;
 }
 
-void seekAddress(uint16_t target) {
-    if (target >= 0x8000) {
-        if (current_pc < 0x8000 || current_pc > (int32_t)target) {
-            sendCmd(CMD_LOAD_CONFIG);
-            sendData14(0x3FFF);
+// Setzt den PC intelligent und schnell auf jede Zieladresse
+void icsp_goto_address(uint16_t addr) {
+    ensureProgMode();
+
+    if (addr >= 0x8000) {
+        // Wechsel in den Configuration-Bereich (0x8000..0x800F)
+        if (current_pc < 0x8000 || current_pc > addr) {
+            icsp_send_cmd(CMD_LOAD_CONFIG);
+            icsp_send_data(0x0000); // Dummy-Wort setzt PC auf 0x8000
             current_pc = 0x8000;
         }
-        while (current_pc < (int32_t)target) {
-            sendCmd(CMD_INC_ADDRESS);
+        while (current_pc < addr) {
+            icsp_send_cmd(CMD_INC_ADDRESS);
             current_pc++;
         }
     } else {
-        if (current_pc < 0 || current_pc > (int32_t)target || current_pc >= 0x8000) {
-            sendCmd(CMD_RESET_ADDRESS);
-            current_pc = 0;
+        // Im normalen Programmspeicher (0x0000..0x3FFF)
+        if (current_pc >= 0x8000 || current_pc > addr) {
+            icsp_send_cmd(CMD_RESET_ADDRESS); // Setzt PC direkt auf 0x0000
+            current_pc = 0x0000;
         }
-        while (current_pc < (int32_t)target) {
-            sendCmd(CMD_INC_ADDRESS);
+        while (current_pc < addr) {
+            icsp_send_cmd(CMD_INC_ADDRESS);
             current_pc++;
+            if ((current_pc & 0x01FF) == 0) yield(); // Verhindert Watchdog-Reset
         }
     }
 }
 
 uint16_t readDeviceID() {
-    enterProgMode();
-    sendCmd(CMD_LOAD_CONFIG);
-    sendData14(0x0000);
-    for (int i = 0; i < 6; i++) {
-        sendCmd(CMD_INC_ADDRESS);
-    }
-    sendCmd(CMD_READ_DATA_PROG);
-    uint16_t id = readData14();
-    current_pc = 0x8006;
-    return id;
+    icsp_goto_address(0x8006);
+    icsp_send_cmd(CMD_READ_DATA_PROG);
+    return icsp_read_data();
 }
 
 void bulkErase() {
-    enterProgMode();
-    sendCmd(CMD_LOAD_CONFIG);
-    sendData14(0x3FFF);
-    sendCmd(CMD_BULK_ERASE_PROG);
+    // Für Bulk Erase einmal frisch in den ProgMode gehen
+    in_prog_mode = false;
+    ensureProgMode();
+    // Laut DS41397B: Load Config (0x00) damit Config Words + Flash gelöscht werden!
+    icsp_send_cmd(CMD_LOAD_CONFIG);
+    icsp_send_data(0x3FFF);
+    icsp_send_cmd(CMD_BULK_ERASE_PROG);
+    delay(15); // Tera (max 10 ms)
+    icsp_send_cmd(CMD_BULK_ERASE_DATA);
     delay(15);
-    sendCmd(CMD_BULK_ERASE_DATA);
-    delay(15);
-    current_pc = -1;
+    // Nach dem Erase sauber neu synchronisieren
+    exitProgMode();
+    delay(10);
+    ensureProgMode();
+}
+
+uint16_t readWordAt(uint16_t addr) {
+    icsp_goto_address(addr);
+    icsp_send_cmd(CMD_READ_DATA_PROG);
+    return icsp_read_data();
+}
+
+void writeConfigWord(uint16_t addr, uint16_t val) {
+    icsp_goto_address(addr);
+    icsp_send_cmd(CMD_LOAD_DATA_PROG);
+    icsp_send_data(val);
+    icsp_send_cmd(CMD_BEGIN_INT_TIMED_PRG);
+    delay(10); // Tprog für Config Words (5 ms laut Datenblatt)
+}
+
+void writeRow32(uint16_t start_addr, const uint16_t *words) {
+    icsp_goto_address(start_addr);
+
+    for (int i = 0; i < 31; i++) {
+        icsp_send_cmd(CMD_LOAD_DATA_PROG);
+        icsp_send_data(words[i]);
+        icsp_send_cmd(CMD_INC_ADDRESS);
+        current_pc++;
+    }
+
+    icsp_send_cmd(CMD_LOAD_DATA_PROG);
+    icsp_send_data(words[31]);
+    icsp_send_cmd(CMD_BEGIN_INT_TIMED_PRG);
+    delay(5); // Tprog für 32-Wort Flash-Row (max 2.5 ms)
+
+    // Nächste Zeile vorbereiten
+    icsp_send_cmd(CMD_INC_ADDRESS);
+    current_pc++;
 }
 
 void setup() {
     Serial.begin(115200);
-    pinMode(PIN_MCLR, OUTPUT);
-    digitalWrite(PIN_MCLR, HIGH);
-    pinMode(PIN_PGC, OUTPUT);
-    pinMode(PIN_PGD, OUTPUT);
-    digitalWrite(PIN_PGC, LOW);
-    digitalWrite(PIN_PGD, LOW);
+    exitProgMode();
 }
 
 void loop() {
-#if defined(ESP8266)
     yield();
-#endif
 
     if (!Serial.available()) return;
     String line = Serial.readStringUntil('\n');
     line.trim();
 
     if (line == "ID") {
+        in_prog_mode = false;
         uint16_t id = readDeviceID();
         Serial.printf("OK ID:0x%04X\n", id);
     }
@@ -196,21 +254,34 @@ void loop() {
         bulkErase();
         Serial.println("OK ERASED");
     }
-    else if (line.startsWith("WPROG:")) {
+    else if (line.startsWith("RPROG:")) {
+        uint16_t addr = (uint16_t)strtoul(line.substring(6).c_str(), NULL, 16);
+        uint16_t val = readWordAt(addr);
+        Serial.printf("OK RPROG:0x%04X:0x%04X\n", addr, val);
+    }
+    else if (line.startsWith("WCONFIG:")) {
         int p1 = line.indexOf(':');
         int p2 = line.indexOf(':', p1 + 1);
-        uint16_t addr = strtol(line.substring(p1 + 1, p2).c_str(), NULL, 16);
-        uint16_t val  = strtol(line.substring(p2 + 1).c_str(), NULL, 16);
+        uint16_t addr = (uint16_t)strtoul(line.substring(p1 + 1, p2).c_str(), NULL, 16);
+        uint16_t val  = (uint16_t)strtoul(line.substring(p2 + 1).c_str(), NULL, 16);
+        writeConfigWord(addr, val);
+        Serial.println("OK");
+    }
+    else if (line.startsWith("WROW32:")) {
+        int cur_pos = 7;
+        int next_col = line.indexOf(':', cur_pos);
+        uint16_t start_addr = (uint16_t)strtoul(line.substring(cur_pos, next_col).c_str(), NULL, 16);
+        cur_pos = next_col + 1;
 
-        enterProgMode();
-        seekAddress(addr);
-        sendCmd(CMD_LOAD_DATA_PROG);
-        sendData14(val);
-        sendCmd(CMD_BEGIN_INT_TIMED_PRG);
-        delay(4); // T_PINT: typisch 2.5ms
-        sendCmd(CMD_INC_ADDRESS);
-        current_pc++;
+        uint16_t row_words[32];
+        for (int i = 0; i < 32; i++) {
+            next_col = line.indexOf(':', cur_pos);
+            if (next_col == -1) next_col = line.length();
+            row_words[i] = (uint16_t)strtoul(line.substring(cur_pos, next_col).c_str(), NULL, 16);
+            cur_pos = next_col + 1;
+        }
 
+        writeRow32(start_addr, row_words);
         Serial.println("OK");
     }
     else if (line == "DONE") {

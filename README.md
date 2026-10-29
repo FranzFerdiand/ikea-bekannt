@@ -1,119 +1,144 @@
-# IKEA Bekant Firmware-Mod mit ESP32/ESP8266 & Heizkörper-Schutz
+# IKEA Bekant Firmware-Mod mit ESP32 / ESP8266 & dynamischem Heizkörper-Schutz
 
-Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und Build-Skripte, um das originale IKEA Bekant Bedienteil (`PIC16LF1938`) ohne teures Spezialgerät mithilfe eines **ESP32 oder ESP8266 als 3,3V Low-Voltage-Programmer** mit einer Memory- & Kollisionsschutz-Firmware zu flashen.
+Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und Build-Skripte, um das originale IKEA Bekant Bedienteil (`PIC16LF1938`) **ohne teures Spezialgerät (wie PICkit)** mithilfe eines gewöhnlichen **ESP32 oder ESP8266 als 3,3V ICSP-Programmer** mit einer Memory- & Kollisionsschutz-Firmware zu flashen.
 
-**Keine MPLAB X IDE erforderlich!** Die Firmware ist als fertige `.hex`-Datei bereits enthalten und wird bei Code-Änderungen vollautomatisch über GitHub Actions in der Cloud gebaut.
-
----
-
-## Projektübersicht & Ordnerstruktur
-
-* [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Fertig kompilierte `.hex`-Datei** (Standard: ca. 73 cm Heizkörperschutz, dynamisch per EEPROM anpassbar, LVP aktiviert).
-* [`firmware/`](firmware/): Der Quellcode der Bekant-Firmware (angepasster Fork von `GuentherMair` / `ivanwick`).
-  * [`firmware/src/bekant/radiator_config.h`](firmware/src/bekant/radiator_config.h): Definition von Notfall-Minimum, Standardwert (`RADIATOR_DEFAULT_POS`), Bremsreserve und Entsperr-Fenster.
-  * [`firmware/src/bekant/bui.c`](firmware/src/bekant/bui.c): Gestensteuerung, dynamisches Heizkörper-Limit aus EEPROM (`low_pos`), Unlock-am-Anschlag-Logik und Relais-Feedback.
-  * [`firmware/src/bekant/bctrl.c`](firmware/src/bekant/bctrl.c): Hardwarenaher Sanft-Stopp (LIN-Bus Bremssequenz `0x87 -> 0x84 -> 0xFC`).
-  * [`firmware/src/configuration_bits.c`](firmware/src/configuration_bits.c): Konfiguriert mit `LVP = ON` für 3,3V Low-Voltage-Programming via ESP32/ESP8266.
-  * [`firmware/Makefile`](firmware/Makefile): Makefile zum direkten Bauen via `xc8-cc`.
-* [`.github/workflows/build.yml`](.github/workflows/build.yml): Automatische Cloud-Kompilierung bei jedem Git-Push (GitHub Actions).
-* [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino): Arduino-Sketch für **ESP32** (mit Auto-Erkennung).
-* [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Spezieller Arduino-Sketch für **ESP8266** (NodeMCU / Wemos D1 Mini).
-* [`tools/flash_bekant.py`](tools/flash_bekant.py): Python 3 Skript zum Übertragen der `.hex`-Datei über den ESP auf den PIC.
-* [`tools/build_local.bat`](tools/build_local.bat): Lokales Batch-Skript zum Bauen per CLI (ohne IDE).
+**Keine MPLAB X IDE erforderlich!** Die Firmware liegt als fertige `.hex`-Datei bereit und wird bei Code-Änderungen vollautomatisch über GitHub Actions in der Cloud gebaut.
 
 ---
 
-## 1. Dynamisches Heizkörper-Minimum im EEPROM (Nie wieder neu flashen!)
+## 🌟 Highlights & Features
 
-Das Heizkörper-Limit ist **dynamisch im EEPROM an `low_pos` gekoppelt**. Du musst den Tisch nach dem ersten Flashen **nie wieder zum Ändern der Mindesthöhe flashen**, sondern kannst das Limit direkt per Tastenkombination am Bedienteil einstellen!
-
-Formel: **1 cm ≈ 100 Ticks** (Standard-Sitzhöhe ca. 70 cm = 1590 Ticks).
-
-$$\text{Ziel-Ticks} = 1590 + (\text{Wunsch-Minimalhöhe in cm} - 70) \times 100$$
-
-Standard-Konfiguration in [`firmware/src/bekant/radiator_config.h`](firmware/src/bekant/radiator_config.h):
-```c
-#define RADIATOR_UNLOCKED_POS   ((int16_t)0x0190) // Absolutes Notfall-Minimum (400 Ticks ≈ 65 cm)
-#define RADIATOR_DEFAULT_POS    ((int16_t)0x0762) // Standard-Startwert leerer Chip (1890 Ticks ≈ 73 cm)
-#define RADIATOR_BRAKE_MARGIN   ((int16_t)0x0050) // ca. 8 mm Bremsreserve
-#define RADIATOR_UNLOCK_WINDOW  ((int16_t)0x0064) // Toleranzfenster am Anschlag (100 Ticks ≈ 1 cm)
-```
+1. **Kein Spezialprogrammer nötig:** Jeder ESP32 oder ESP8266 (NodeMCU / D1 Mini) flasht den Chip direkt über 3,3 V.
+2. **Rock-Solides ICSP-Protokoll (Microchip DS41397B):** 32-Wort-Zeilenprogrammierung (`WROW32`) und gezielte Konfigurationsprogrammierung (`WCONFIG`) flashen den gesamten PIC in unter **20 Sekunden**.
+3. **9V-Batterie-Trick:** Entsperrt beim allerersten Mal die werkseitige Sperre (`LVP = OFF`), danach reicht reines 3,3V-LVP für immer aus.
+4. **Dynamisches Heizkörper-Limit im EEPROM:** Die untere Stoppgrenze (`low_pos`) ist direkt an das EEPROM gekoppelt. Du musst den Tisch **nie wieder neu flashen**, um das Limit zu verstellen!
+5. **Notfall-Unlock am Anschlag:** Wer doch einmal tiefer fahren muss, hält die Tasten am Anschlag für 3 Sekunden gedrückt, um das Limit temporär aufzuheben.
+6. **Dual-Gestensteuerung:** Unterstützt sowohl die intuitive 1-Hand-Doppelklick-Steuerung als auch die klassische 2-Hand-Kombinationssteuerung.
 
 ---
 
-## 2. Firmware kompilieren (ohne MPLAB X IDE!)
+## 📁 Repository-Struktur
 
-Du musst die ressourcenhungrige MPLAB X IDE **nicht** installieren.
-
-* **Direkt nutzen:** Die fertige Datei [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex) liegt bereits fertig kompiliert im Repository!
-* **Nach Codeänderungen (Cloud-Build via GitHub Actions):** Sobald du Änderungen pushst, kompiliert GitHub Actions die Firmware automatisch in einem Linux-Container. Unter dem Reiter **Actions** -> neuester Build findest du das fertige `bekantfirmware-hex` Artifact.
-* **Optional lokal per CLI:** Wer den XC8-Compiler auf dem Rechner hat, startet einfach [`tools/build_local.bat`](tools/build_local.bat).
+* [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Fertig kompilierte Firmware** (Standard: ca. 73 cm Heizkörperschutz, dynamisch per EEPROM anpassbar, `LVP = ON`).
+* [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino): Universeller Arduino-Sketch für **ESP32** (Pin GPIO 18, 19, 21).
+* [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Arduino-Sketch für **ESP8266** (NodeMCU / Wemos D1 Mini; Pin D5, D6, D7).
+* [`tools/flash_bekant.py`](tools/flash_bekant.py): High-Speed Python-Flasher mit 32-Wort-Zeilenspeicher und automatischer Verifikation.
+* [`tools/check_diag.py`](tools/check_diag.py): Diagnose-Skript zum Auslesen von Device ID, CONFIG1, CONFIG2 und Reset-Vektoren.
+* [`firmware/`](firmware/): Quellcode der Bekant-Firmware:
+  * [`src/bekant/radiator_config.h`](firmware/src/bekant/radiator_config.h): Konfiguration von Minimalgrenzen, Bremsreserve und Unlock-Toleranz.
+  * [`src/bekant/bui.c`](firmware/src/bekant/bui.c): UI-Logik, Gesten, dynamischer EEPROM-Speicher und Relais-Rückmeldung.
+  * [`src/bekant/bctrl.c`](firmware/src/bekant/bctrl.c): LIN-Bus Steuerung und Bremssequenz (`0x87 -> 0x84 -> 0xFC`).
+  * [`src/configuration_bits.c`](firmware/src/configuration_bits.c): PIC-Fuses mit `LVP = ON` und `FOSC = INTOSC`.
+* [`.github/workflows/build.yml`](.github/workflows/build.yml): Automatische Cloud-Kompilierung via GitHub Actions.
 
 ---
 
-## 3. ESP32 oder ESP8266 als Programmer flashen & verkabeln
+## 🔌 Verkabelung & Hardware
 
-Beide Mikrocontroller (ESP32 und ESP8266) arbeiten nativ mit 3,3 V Logikpegeln und eignen sich hervorragend:
+> [!CAUTION]
+> **SICHERHEIT:** Ziehe vor dem Anschließen des ESP **immer das Verbindungskabel zum Tischnetzteil ab!** Das Bedienteil darf während des Flash-Vorgangs **niemals** am Tisch eingesteckt sein.
 
-* **Bei Nutzung eines ESP32:** Flashe [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino).
-* **Bei Nutzung eines ESP8266 (NodeMCU / Wemos D1 Mini):** Flashe [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino).
-
-> **SICHERHEIT:** Ziehe vor dem Anschließen das Tischkabel vom Bedienteil ab! Das Bedienteil darf NIEMALS am Tisch eingesteckt sein, während geflasht wird.
-
-### Pinbelegung im Vergleich
+### Pinbelegung Bedienteil <-> ESP
 
 | IKEA Bedienteil Pad | Signal | ESP32 Pin | ESP8266 Pin (NodeMCU / D1 Mini) | Wichtiger Hinweis |
 | :--- | :--- | :--- | :--- | :--- |
 | **Pad 1** (oft eckig) | `MCLR / VPP` | **GPIO 18** | **D5** (GPIO 14) | Reset / Programmierfreigabe |
 | **Pad 2** | `VDD` | **3V3** | **3V3** (3.3V) | **ACHTUNG: NIEMALS an 5V / VIN!** |
 | **Pad 3** | `VSS` | **GND** | **GND** (G) | Masse |
-| **Pad 4** | `PGD` | **GPIO 19** | **D6** (GPIO 12) | ICSP-Daten |
-| **Pad 5** | `PGC` | **GPIO 21** | **D7** (GPIO 13) | ICSP-Takt |
+| **Pad 4** | `PGD` | **GPIO 19** | **D6** (GPIO 12) | ICSP-Daten (ICSPDAT) |
+| **Pad 5** | `PGC` | **GPIO 21** | **D7** (GPIO 13) | ICSP-Takt (ICSPCLK) |
 
 ---
 
-### Der 9V-Batterie-Trick beim ALLERERSTEN Flashen
+## ⚡ Der 9V-Batterie-Trick beim ALLERERSTEN Flashen
 
-IKEA liefert den PIC16LF1938 ab Werk mit gesetzter Sperre **`LVP = OFF`** (Low-Voltage Programming deaktiviert) aus. Dadurch ignoriert der fabrikneue Chip reine 3,3V-Programmierbefehle am MCLR-Pin.
+IKEA liefert den `PIC16LF1938` ab Werk mit gesetzter Sicherung **`LVP = OFF`** (Low-Voltage-Programming deaktiviert) aus. Dadurch reagiert ein fabrikneuer Chip zunächst nicht auf reine 3,3V-Befehle am MCLR-Pin.
 
-Mit einer gewöhnlichen **9V-Blockbatterie** lässt sich dieser Schutz jedoch in Sekunden knacken (High-Voltage ICSP Entry), ohne einen teuren PICkit-Programmer kaufen zu müssen:
-
-1. **Batterie-Minus (GND / Minuspol):** Verbinde den Minuspol der 9V-Batterie mit **GND** (ESP GND bzw. Pad 3 des Bedienteils).
-2. **Batterie-Plus (+9V):** 
-   * **Nur beim ersten Flashen:** Trenne Pin D5 / GPIO 18 kurz ab und halte den Pluspol der 9V-Batterie (idealerweise über einen 1kΩ–10kΩ Schutzwiderstand) direkt an **Pad 1 (MCLR)**.
-   * Alternativ: Wenn Pin D5 angeschlossen bleibt, eine kleine Diode (z. B. 1N4148) in Reihe zwischen D5 und Pad 1 schalten (Kathode an Pad 1), damit die 9V nicht in den ESP-Ausgang zurückfließen.
-3. Sobald der Chip gelöscht und unsere Firmware geflasht wurde, ist **`LVP = ON` dauerhaft aktiv**!
-4. **Ab dem 2. Flashen:** Du brauchst die 9V-Batterie nie wieder! Pin D5 (ESP8266) bzw. GPIO 18 (ESP32) steuert MCLR direkt mit 3,3 V über den genormten Microchip LVP-Key `0x4D434850` ("MCHP").
+Mit einer gewöhnlichen **9V-Blockbatterie** lässt sich diese Sperre in Sekunden überlisten:
+1. **Batterie-Minus (GND):** Verbinde den Minuspol der 9V-Batterie mit **GND** (ESP GND bzw. Pad 3).
+2. **Batterie-Plus (+9V):**
+   * Halte beim ersten Flashen den Pluspol der 9V-Batterie (idealerweise über einen 1 kΩ – 10 kΩ Widerstand) an **Pad 1 (MCLR)**, während der Erase- und Flash-Vorgang startet.
+   * *Alternativ:* Pin D5 / GPIO 18 über eine kleine Diode (z. B. 1N4148, Kathode an Pad 1) verbinden, damit keine 9 V in den ESP fließen.
+3. Sobald der Chip einmal gelöscht und unsere Firmware geflasht wurde, ist **`LVP = ON` dauerhaft aktiv**!
+4. **Ab dem 2. Flashen:** Du brauchst die 9V-Batterie nie wieder! Pin D5 / GPIO 18 steuert den Chip vollautomatisch mit 3,3 V.
 
 ---
 
-## 4. Verbindung testen & Flashen
+## 🚀 Schritt-für-Schritt Anleitung
 
-1. **Test im Seriellen Monitor:** Öffne nach dem Flashen des ESP den Seriellen Monitor (115200 Baud, Newline) und sende `ID`:
-   * Erwartete Antwort: `OK ID:0x246x` (Kennung für `PIC16LF1938`).
-2. **Flashen über Python:** Starte das Skript:
+### Schritt 1: ESP-Programmer flashen
+1. Öffne die Arduino IDE.
+2. Lade [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino) (für ESP32) bzw. [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (für ESP8266).
+3. Flashe den Sketch auf deinen ESP.
+
+### Schritt 2: Firmware flashen
+Verbinde die 5 Leitungen mit dem ausgesteckten Bedienteil und führe auf dem PC aus:
+
 ```bash
 python tools/flash_bekant.py COM12 bin/bekantfirmware.hex
 ```
-*(Ersetze `COM12` durch deinen COM-Port).*
-* Das Skript wartet bis zu 90 Sekunden auf die Chip-Erkennung.
-* Wenn der Chip noch auf Werkseinstellungen steht, halte die 9V an Pad 1.
-* Wenn bereits unsere Firmware (mit `LVP = ON`) geflasht ist und D5 verbunden ist, wird der Chip sofort erkannt und in ca. 12–15 Sekunden automatisch geflasht!
+*(Ersetze `COM12` durch deinen Port).*
+
+**Ablauf im Skript:**
+* Erkennt den Chip (`OK ID:0x24A3`).
+* Löscht Flash & Konfiguration (`OK ERASED`).
+* Schreibt alle 128 Zeilen per 32-Wort-Latch (`WROW32`).
+* Schreibt `CONFIG1 = 0x0FFC` und `CONFIG2 = 0x3AFC`.
+* Verifiziert alle Schlüsseladressen. Dauer: ca. **15–20 Sekunden**!
+
+### Schritt 3: Schnelle Diagnose (optional)
+Mit [`tools/check_diag.py`](tools/check_diag.py) kannst du den Speicher jederzeit überprüfen:
+```bash
+python tools/check_diag.py COM12
+```
 
 ---
 
-## 5. Bedienung im Alltag
+## 🛠️ Wichtig beim Wiederanstecken an den Tisch (Troubleshooting)
 
-* **Automatisches Fahren (Gestensteuerung):**
-  * Nach **OBEN:** `Hoch (△)` halten, kurz `Runter (▽)` tippen, loslassen.
-  * Nach **UNTEN:** `Runter (▽)` halten, kurz `Hoch (△)` tippen, loslassen.
-  * **Sofort-Stopp:** Beliebige Taste antippen.
+> [!IMPORTANT]
+> **Power-Cycle durchführen!**
+> Wenn das Bedienteil nach dem Flashen wieder an den Tisch angesteckt wird und der Tisch zunächst gar nicht reagiert:
+> 1. Trenne das Tischnetzteil für **15 Sekunden komplett vom 230V-Netz**.
+> 2. Stecke es wieder ein.
+> 
+> **Hintergrund:** Beim allerersten Start führt die Firmware einen LIN-Bus-Scan durch (`bscan_scan()`), um die Tischbeine zu initialisieren. Waren die Beine noch im alten Status oder der Bus kurzzeitig blockiert (Messung Weiß–Blau liegt bei ~2V statt >20V), schalten die Beine stumm. Erst ein kompletter Kaltstart synchronisiert Controller und Beine sauber.
 
-### Heizkörper-Limit und Speicherpositionen verwalten
+---
 
-| Was du tun möchtest | Vorgehen am Tisch |
+## 🎮 Bedienung & Gestensteuerung
+
+### Normales Fahren & Memory-Positionen
+* **Hochfahren:** Taste `▲` drücken und halten.
+* **Runterfahren:** Taste `▼` drücken und halten.
+* **Auto-Fahrt zur Sitzposition (Memory 1):** Doppelklick auf `▼` *oder* `▼` halten und kurz `▲` tippen.
+* **Auto-Fahrt zur Stehposition (Memory 2):** Doppelklick auf `▲` *oder* `▲` halten und kurz `▼` tippen.
+* **Sofort-Stopp:** Beliebige Taste kurz antippen.
+
+### Heizkörper-Limit (unterer Endstopp) anpassen
+
+| Aktion | Vorgehensweise am Bedienteil |
 | :--- | :--- |
-| **Heizkörper-Minimum zum ersten Mal festlegen** | Auf Wunschhöhe über den Heizkörper fahren $\rightarrow$ **3 Sek. beide Tasten halten** (speichert `low_pos` als Sitzhöhe & Hard-Limit). Danach nach oben fahren $\rightarrow$ **3 Sek. beide Tasten halten** (speichert `high_pos`). |
-| **Minimum später nach OBEN korrigieren** | Einfach auf die neue (höhere) Position fahren $\rightarrow$ **3 Sek. beide Tasten halten**. |
-| **Minimum später nach UNTEN korrigieren** *(Unlock am Anschlag)* | 1. Ganz nach unten bis zum automatischen Stopp am aktuellen Limit fahren.<br>2. Direkt am Stopp **3 Sek. beide Tasten halten** *(Relais klicken als Bestätigung, Limit ist nun temporär entsperrt)*.<br>3. Mit `Runter` vorsichtig tiefer auf die neue Höhe fahren.<br>4. Erneut **3 Sek. beide Tasten halten** *(neues Limit ist fest im EEPROM verankert & wieder aktiv)*. |
-| **Werkseinstellungen wiederherstellen** | Beide Tasten **8 Sekunden** gedrückt halten (Relais klickt, alle Speicherpositionen im EEPROM werden gelöscht). |
+| **Heizkörper-Limit erstmalig festlegen** | Auf gewünschte Mindesthöhe fahren $\rightarrow$ **3 Sekunden beide Tasten halten** (Relais klickt: `low_pos` ist gespeichert und bildet die neue Untergrenze). |
+| **Limit nach OBEN korrigieren** | Einfach auf die neue, höhere Position fahren $\rightarrow$ **3 Sekunden beide Tasten halten**. |
+| **Limit nach UNTEN korrigieren (Unlock am Anschlag)** | 1. Ganz nach unten bis zum automatischen Stopp am aktuellen Limit fahren.<br>2. Direkt am Stopp **3 Sekunden beide Tasten halten** (Relais klickt: Limit ist temporär entsperrt).<br>3. Mit `▼` vorsichtig tiefer auf die neue Höhe fahren.<br>4. Erneut **3 Sekunden beide Tasten halten** (neues Limit ist fest gespeichert). |
+| **Werkseinstellungen wiederherstellen** | Beide Tasten für **8 Sekunden** gedrückt halten (alle Speicherpositionen im EEPROM werden gelöscht). |
+
+---
+
+## 🙏 Credits & Danksagung
+
+Dieses Projekt basiert auf der fantastischen Vorarbeit und Dokumentation der Open-Source-Community:
+
+* **[ivanwick (Ivan Wick)](https://github.com/ivanwick/bekantfirmware):** Urheber des ursprünglichen Reverse-Engineerings des IKEA Bekant LIN-Bus-Protokolls, der ersten freien Firmware-Architektur und der Dokumentation der Platinen-Pinouts.
+* **[DieSteinhose](https://github.com/DieSteinhose/bekantfirmware):** Urheber der 1-Hand-Doppelklick-Gestensteuerung für das Bekant-Bedienteil.
+* **[GuentherMair](https://github.com/GuentherMair/bekantfirmware):** Upstream-Dokumentation und kontinuierliche Pflege des Firmware-Cores.
+* **Microchip Technology:** Für die offizielle ICSP-Programmierspezifikation DS41397B für die PIC16(L)F193X-Familie.
+* **iFixit & Community-Tester:** Für detaillierte Gehäuse-Teardowns und wertvolle Messungen der Hardware-Revisionen.
+
+---
+
+## 📄 Lizenz
+
+Dieses Projekt steht unter der gleichen Open-Source-Lizenz wie das Basis-Projekt (siehe [firmware/LICENSE](firmware/LICENSE)).
+Modifikationen für Heizkörper-Kollisionsschutz, EEPROM-Dynamik und ESP32/ESP8266-Programmer-Tools sind frei zur Nutzung, Weiterentwicklung und Veröffentlichung.

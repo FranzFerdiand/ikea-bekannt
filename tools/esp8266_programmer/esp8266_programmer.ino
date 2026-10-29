@@ -1,9 +1,20 @@
 /*
  * ESP8266 ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
- * Korrigierte Version:
- * - Kein erneutes enterProgMode() vor jeder Zeile (verhindert Bit-Shift & 0x0008-Bug!)
- * - Smartes PC-Tracking (kein langsames Hochzählen ab 0x0000 bei jeder Zeile)
- * - Sauberes 3.3V LVP nach Microchip DS41397B
+ * 
+ * Basierend auf Microchip DS41397B (PIC16(L)F193X Memory Programming Specification).
+ * Features:
+ * - 3.3V Low-Voltage Programming (LVP) mit 32-Bit Key "MCHP" (0x4D434850)
+ * - 32-Wort Zeilenprogrammierung (WROW32) für ultraschnelles, sicheres Flashen (~15-20s)
+ * - Einzelwort-Konfigurationsprogrammierung (WCONFIG) für CONFIG1 (0x8007) & CONFIG2 (0x8008)
+ * - Smartes Program-Counter-Tracking mit Watchdog-Yield (kein WDT-Reset auf ESP8266)
+ * - Kein Re-Entering vor jedem Befehl (verhindert Bit-Shifting & 0x0008-Korruption)
+ * 
+ * Pinbelegung ESP8266 (NodeMCU / D1 Mini):
+ * - D5 (GPIO 14) <-> ICSP Pad 1 (MCLR / VPP)
+ * - 3V3 (3.3V)   <-> ICSP Pad 2 (VDD / 3.3V - NIEMALS 5V/VIN!)
+ * - G (GND)      <-> ICSP Pad 3 (VSS / Masse)
+ * - D6 (GPIO 12) <-> ICSP Pad 4 (PGD / ICSPDAT)
+ * - D7 (GPIO 13) <-> ICSP Pad 5 (PGC / ICSPCLK)
  */
 #include <Arduino.h>
 
@@ -78,7 +89,7 @@ uint16_t icsp_read_data() {
     return data & 0x3FFF;
 }
 
-// Betritt den 3.3V LVP-Modus NUR DANN, wenn wir noch nicht drin sind!
+// Betritt den 3.3V LVP-Modus stabil (nur wenn noch nicht im ProgMode)
 void ensureProgMode() {
     if (in_prog_mode) return;
 
@@ -123,7 +134,7 @@ void exitProgMode() {
     current_pc = 0xFFFF;
 }
 
-// Setzt den PC intelligent und schnell auf jede Adresse
+// Setzt den PC intelligent und schnell auf jede Zieladresse
 void icsp_goto_address(uint16_t addr) {
     ensureProgMode();
 
@@ -204,7 +215,7 @@ void writeRow32(uint16_t start_addr, const uint16_t *words) {
     icsp_send_cmd(CMD_BEGIN_INT_TIMED_PRG);
     delay(5); // Tprog für 32-Wort Flash-Row (max 2.5 ms)
 
-    // Nächste Zeile vorbereitet
+    // Nächste Zeile vorbereiten
     icsp_send_cmd(CMD_INC_ADDRESS);
     current_pc++;
 }
@@ -222,7 +233,6 @@ void loop() {
     line.trim();
 
     if (line == "ID") {
-        // Erzwingt frischen Eintritt bei ID-Abfrage
         in_prog_mode = false;
         uint16_t id = readDeviceID();
         Serial.printf("OK ID:0x%04X\n", id);
