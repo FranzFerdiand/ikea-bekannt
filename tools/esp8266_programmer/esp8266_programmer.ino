@@ -1,20 +1,20 @@
 /*
- * ESP8266 Low-Voltage ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
- * Geeignet für NodeMCU v2/v3, Wemos D1 Mini und kompatible ESP8266 Boards.
- * Protokoll nach Microchip DS41397 (14-Bit Enhanced Midrange, LVP Key: 0x4D434850 "MCHP")
- * Logikpegel: 3,3 V
+ * ESP8266 ICSP Programmer für Microchip PIC16LF1938 (IKEA Bekant)
+ * Unterstützt sowohl LVP als auch High-Voltage Entry (9V an MCLR).
  *
- * Verkabelung:
- * ESP8266 D5 (GPIO 14) <-> ICSP Pad 1 (MCLR / VPP)
- * ESP8266 3V3 (3.3V)   <-> ICSP Pad 2 (VDD - ACHTUNG: NIEMALS an 5V / VIN!)
- * ESP8266 G   (GND)    <-> ICSP Pad 3 (VSS)
- * ESP8266 D6 (GPIO 12) <-> ICSP Pad 4 (PGD / ICSPDAT)
- * ESP8266 D7 (GPIO 13) <-> ICSP Pad 5 (PGC / ICSPCLK)
+ * Verkabelung für 9V-Batterie-Trick:
+ * 1. ESP8266 D5 NICHT mit Pad 1 verbinden! (D5 bleibt frei).
+ * 2. 9V-Batterie MINUS (-) fest mit ESP8266 GND / Pad 3 verbinden (Gemeinsame Masse).
+ * 3. 9V-Batterie PLUS (+) (über ca. 1k-10k Widerstand) an Pad 1 (MCLR) halten.
+ *
+ * 4. ESP8266 3V3 an Pad 2 (VDD)
+ * 5. ESP8266 GND an Pad 3 (VSS)
+ * 6. ESP8266 D6 (GPIO 12) an Pad 4 (PGD)
+ * 7. ESP8266 D7 (GPIO 13) an Pad 5 (PGC)
  */
 #include <Arduino.h>
 
-// Pins für ESP8266 (D5 = GPIO 14, D6 = GPIO 12, D7 = GPIO 13)
-#define PIN_MCLR  14  // Pin D5
+#define PIN_MCLR  14  // Pin D5 (bleibt bei 9V-Trick unverbunden)
 #define PIN_PGD   12  // Pin D6
 #define PIN_PGC   13  // Pin D7
 
@@ -76,31 +76,18 @@ uint16_t readData14() {
     return (raw >> 1) & 0x3FFF;
 }
 
-void enterLVP() {
-    pinMode(PIN_MCLR, OUTPUT);
+void enterProgMode() {
+    // PGC und PGD initial auf LOW
     pinMode(PIN_PGC, OUTPUT);
     pinMode(PIN_PGD, OUTPUT);
-
     digitalWrite(PIN_PGC, LOW);
     digitalWrite(PIN_PGD, LOW);
-    digitalWrite(PIN_MCLR, HIGH);
-    delay(10);
-    digitalWrite(PIN_MCLR, LOW);
-    delayMicroseconds(500);
-
-    // 32-Bit LVP Key 0x4D434850 ("MCHP") LSB first einschieben + 1 Extratakt
-    uint32_t key = 0x4D434850;
-    for (int i = 0; i < 32; i++) {
-        sendBit((key >> i) & 0x01);
-    }
-    sendBit(0);
     delay(5);
 }
 
-void exitLVP() {
+void exitProgMode() {
     pinMode(PIN_PGD, INPUT);
     pinMode(PIN_PGC, INPUT);
-    digitalWrite(PIN_MCLR, HIGH);
 }
 
 uint16_t readDeviceID() {
@@ -117,19 +104,20 @@ void bulkErase() {
     sendCmd(CMD_LOAD_CONFIG);
     sendData14(0x3FFF);
     sendCmd(CMD_BULK_ERASE_PROG);
-    delay(10); // T_ERAB = max 10 ms
+    delay(15); // T_ERAB = max 10 ms
     sendCmd(CMD_BULK_ERASE_DATA);
-    delay(10);
+    delay(15);
 }
 
 void setup() {
     Serial.begin(115200);
-    pinMode(PIN_MCLR, OUTPUT);
-    digitalWrite(PIN_MCLR, HIGH);
+    pinMode(PIN_PGC, OUTPUT);
+    pinMode(PIN_PGD, OUTPUT);
+    digitalWrite(PIN_PGC, LOW);
+    digitalWrite(PIN_PGD, LOW);
 }
 
 void loop() {
-    // Software Watchdog für ESP8266 füttern
     yield();
 
     if (!Serial.available()) return;
@@ -137,26 +125,24 @@ void loop() {
     line.trim();
 
     if (line == "ID") {
-        enterLVP();
+        enterProgMode();
         uint16_t id = readDeviceID();
-        exitLVP();
-        // PIC16LF1938 hat Device-ID 0x2460 (untere 5 Bits = Revision)
+        exitProgMode();
         Serial.printf("OK ID:0x%04X\n", id);
     }
     else if (line == "ERASE") {
-        enterLVP();
+        enterProgMode();
         bulkErase();
-        exitLVP();
+        exitProgMode();
         Serial.println("OK ERASED");
     }
     else if (line.startsWith("WPROG:")) {
-        // Format: WPROG:<hex_word_addr>:<hex_word_val> (Schreibt einzelnes 14-Bit Wort)
         int p1 = line.indexOf(':');
         int p2 = line.indexOf(':', p1 + 1);
         uint16_t addr = strtol(line.substring(p1 + 1, p2).c_str(), NULL, 16);
         uint16_t val  = strtol(line.substring(p2 + 1).c_str(), NULL, 16);
 
-        enterLVP();
+        enterProgMode();
         if (addr >= 0x8000) {
             sendCmd(CMD_LOAD_CONFIG);
             sendData14(0x3FFF);
@@ -168,8 +154,8 @@ void loop() {
         sendCmd(CMD_LOAD_DATA_PROG);
         sendData14(val);
         sendCmd(CMD_BEGIN_INT_TIMED_PRG);
-        delay(6); // T_PINT = 2.5 ms Prog, 5 ms Config
-        exitLVP();
+        delay(6);
+        exitProgMode();
         Serial.println("OK");
     }
 }

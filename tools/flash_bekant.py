@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-flash_bekant.py - Überträgt Intel-HEX auf den PIC16LF1938 via ESP32 ICSP Programmer
+flash_bekant.py - Überträgt Intel-HEX auf den PIC16LF1938 via ESP8266/ESP32 ICSP Programmer
 """
 import sys
 import time
@@ -19,60 +19,78 @@ def parse_intel_hex(filename):
             rec_type = int(line[7:9], 16)
             data = line[9:9 + byte_count * 2]
 
-            if rec_type == 0x04:  # Extended Linear Address
+            if rec_type == 0x04:
                 ext_addr = int(data, 16) << 16
-            elif rec_type == 0x00:  # Data Record
+            elif rec_type == 0x00:
                 full_byte_addr = ext_addr + addr
                 for i in range(0, byte_count, 2):
                     low_b = int(data[i*2:i*2+2], 16)
                     high_b = int(data[i*2+2:i*2+4], 16)
                     word_val = ((high_b << 8) | low_b) & 0x3FFF
                     word_addr = (full_byte_addr + i) // 2
-                    # Nur Flash (0x0000-0x3FFF) und Config-Words (0x8007-0x8008)
                     if word_addr < 0x4000 or word_addr in (0x8007, 0x8008):
                         words[word_addr] = word_val
     return words
 
 def main():
-    if len(sys.argv) < 3:
-        print("Nutzung: python flash_bekant.py <COM-Port> <pfad_zur_datei.hex>")
-        print("Beispiel: python flash_bekant.py COM3 bekantfirmware.hex")
-        sys.exit(1)
-
-    port = sys.argv[1]
-    hex_file = sys.argv[2]
+    port = sys.argv[1] if len(sys.argv) > 1 else 'COM12'
+    hex_file = sys.argv[2] if len(sys.argv) > 2 else 'bin/bekantfirmware.hex'
     words = parse_intel_hex(hex_file)
-    print(f"[*] {len(words)} 14-Bit-Wörter aus HEX-Datei geladen.")
+    print(f"[*] {len(words)} Wörter geladen aus {hex_file}.")
 
-    ser = serial.Serial(port, 115200, timeout=2)
-    time.sleep(2)
+    ser = serial.Serial(port, 115200, timeout=0.1)
+    time.sleep(0.5)
 
-    ser.write(b"ID\n")
-    resp = ser.readline().decode().strip()
-    print(f"[*] Chip-Antwort: {resp}")
-    if "0x0000" in resp or "0x3FFF" in resp or "ID:" not in resp:
-        print("[!] Fehler: PIC16LF1938 nicht erkannt! Bitte Verkabelung prüfen.")
+    print("[*] BEREIT! Halte jetzt die 9V an Pin 1 (MCLR). Wartezeit bis zu 90s...")
+    valid = False
+    start_wait = time.time()
+    last_status = ""
+    while time.time() - start_wait < 90:
+        ser.write(b"ID\n")
+        resp = ser.readline().decode().strip()
+        if "OK ID:0x" in resp and "0x0000" not in resp and "0x3FFF" not in resp:
+            print(f"\n[+] KONTAKT DA! Erkannt: {resp}!")
+            valid = True
+            break
+        if resp and resp != last_status:
+            sys.stdout.write(f"\n[{time.strftime('%H:%M:%S')}] Status: {resp} ")
+            last_status = resp
+        else:
+            sys.stdout.write(".")
+        sys.stdout.flush()
+        time.sleep(0.05)
+
+    if not valid:
+        print("\n[!] Timeout (90s abgelaufen).")
+        ser.close()
         sys.exit(1)
 
-    print("[*] Lösche Chip (Bulk Erase)...")
+    print("\n[*] LÖSCHE CHIP (Bulk Erase)...")
     ser.write(b"ERASE\n")
-    erase_resp = ser.readline().decode().strip()
-    print(f"    -> {erase_resp}")
+    erase_ack = ser.readline().decode().strip()
+    print("    ->", erase_ack)
 
     total = len(words)
+    print(f"[*] FLASHE {total} WÖRTER (ca. 25-30s)... BITTE 9V WEITER FESTHALTEN!")
+    t_start = time.time()
     for idx, (w_addr, w_val) in enumerate(sorted(words.items()), 1):
         if w_val == 0x3FFF:
-            continue  # Leere Wörter überspringen
+            continue
         cmd = f"WPROG:{w_addr:04X}:{w_val:04X}\n"
         ser.write(cmd.encode())
         ack = ser.readline().decode().strip()
         if ack != "OK":
-            print(f"\n[!] Schreibfehler bei Adresse 0x{w_addr:04X}: {ack}")
+            print(f"\n[!] Schreibfehler bei 0x{w_addr:04X}: {ack}")
+            ser.close()
             sys.exit(1)
-        sys.stdout.write(f"\r[*] Flashe: {idx}/{total} (Adresse 0x{w_addr:04X})")
-        sys.stdout.flush()
+        if idx % 100 == 0 or idx == total:
+            pct = int((idx / total) * 100)
+            sys.stdout.write(f"\r[*] Fortschritt: {pct}% ({idx}/{total} Wörter)")
+            sys.stdout.flush()
 
-    print("\n[+] Flashen erfolgreich abgeschlossen!")
+    duration = time.time() - t_start
+    print(f"\n\n[+] ERFOLGREICH GEFLASHED in {duration:.1f}s!")
+    print("[+] DU KANNST DAS 9V-KABEL JETZT ABNEHMEN!")
     ser.close()
 
 if __name__ == "__main__":
