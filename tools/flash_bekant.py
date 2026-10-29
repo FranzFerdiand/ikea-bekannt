@@ -38,7 +38,7 @@ def main():
     words = parse_intel_hex(hex_file)
     print(f"[*] {len(words)} Wörter geladen aus {hex_file}.")
 
-    ser = serial.Serial(port, 115200, timeout=0.1)
+    ser = serial.Serial(port, 115200, timeout=1.5)
     time.sleep(0.5)
 
     print("[*] BEREIT! Halte jetzt die 9V an Pin 1 (MCLR). Wartezeit bis zu 90s...")
@@ -58,7 +58,7 @@ def main():
         else:
             sys.stdout.write(".")
         sys.stdout.flush()
-        time.sleep(0.05)
+        time.sleep(0.06)
 
     if not valid:
         print("\n[!] Timeout (90s abgelaufen).")
@@ -71,7 +71,7 @@ def main():
     print("    ->", erase_ack)
 
     total = len(words)
-    print(f"[*] FLASHE {total} WÖRTER (ca. 25-30s)... BITTE 9V WEITER FESTHALTEN!")
+    print(f"[*] FLASHE {total} WÖRTER (High-Speed ca. 12-15s)... BITTE 9V WEITER FESTHALTEN!")
     t_start = time.time()
     for idx, (w_addr, w_val) in enumerate(sorted(words.items()), 1):
         if w_val == 0x3FFF:
@@ -80,13 +80,21 @@ def main():
         ser.write(cmd.encode())
         ack = ser.readline().decode().strip()
         if ack != "OK":
-            print(f"\n[!] Schreibfehler bei 0x{w_addr:04X}: {ack}")
-            ser.close()
-            sys.exit(1)
+            # Retry once
+            time.sleep(0.01)
+            ser.write(cmd.encode())
+            ack = ser.readline().decode().strip()
+            if ack != "OK":
+                print(f"\n[!] Schreibfehler bei 0x{w_addr:04X}: {ack}")
+                ser.close()
+                sys.exit(1)
         if idx % 100 == 0 or idx == total:
             pct = int((idx / total) * 100)
             sys.stdout.write(f"\r[*] Fortschritt: {pct}% ({idx}/{total} Wörter)")
             sys.stdout.flush()
+
+    ser.write(b"DONE\n")
+    ser.readline()
 
     duration = time.time() - t_start
     print(f"\n\n[+] ERFOLGREICH GEFLASHED in {duration:.1f}s!")
