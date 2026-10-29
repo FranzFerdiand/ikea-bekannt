@@ -54,7 +54,8 @@ $(DFP_XC8_DIR): $(DFP_ATPACK)
 	unzip -q -o $(DFP_ATPACK) -d $(DFPDIR)/pic12-16f1xxx
 
 $(DFP_ATPACK):
-	curl -fL -o $(DFP_ATPACK) \
+	@mkdir -p $(DFPDIR)
+	curl -fL --create-dirs -o $(DFP_ATPACK) \
 	    "https://packs.download.microchip.com/$(DFP_NAME).$(DFP_VERSION).atpack"
 
 clean:
