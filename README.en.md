@@ -1,6 +1,6 @@
 [🇩🇪 Deutsch](README.md) | [🇬🇧 English](README.en.md)
 
-# IKEA Bekant Firmware Mod with ESP32 / ESP8266 & Dynamic Radiator Collision Protection
+# IKEA BEKANT Firmware Mod with ESP32 / ESP8266 & Dynamic Radiator Collision Protection
 
 This repository contains the complete source code, programmer tools, and build scripts to flash the original IKEA Bekant desk controller (`PIC16LF1938`) **without expensive specialized hardware (such as a PICkit)** using a common **ESP32 or ESP8266 as a 3.3V ICSP programmer** with custom position-memory and collision-protection firmware.
 
