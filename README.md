@@ -1,6 +1,6 @@
 [🇩🇪 Deutsch](README.md) | [🇬🇧 English](README.en.md)
 
-# IKEA Bekant Firmware-Mod mit ESP32 / ESP8266 & dynamischem Heizkörper-Schutz
+# IKEA BEKANT Firmware-Mod mit ESP32 / ESP8266 & dynamischem Heizkörper-Schutz
 
 Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und Build-Skripte, um das originale IKEA Bekant Bedienteil (`PIC16LF1938`) **ohne teures Spezialgerät (wie PICkit)** mithilfe eines gewöhnlichen **ESP32 oder ESP8266 als 3,3V ICSP-Programmer** mit einer Memory- & Kollisionsschutz-Firmware zu flashen.
 
