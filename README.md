@@ -21,7 +21,9 @@ Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und 
 
 ## 📁 Repository-Struktur
 
-* [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Fertig kompilierte Firmware** (Standard: ca. 73 cm Heizkörperschutz, dynamisch per EEPROM anpassbar, `LVP = ON`).
+* [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Fertig kompilierte PIC-Firmware** (Standard: ca. 73 cm Heizkörperschutz, dynamisch per EEPROM anpassbar, `LVP = ON`).
+* [`bin/esp32_programmer.bin`](bin/esp32_programmer.bin): **Fertig kompilierte ESP32-Programmer Binary** (sofort flashbar via `esptool.py` oder Web-Flasher).
+* [`bin/esp8266_programmer.bin`](bin/esp8266_programmer.bin): **Fertig kompilierte ESP8266-Programmer Binary** (sofort flashbar für NodeMCU / D1 Mini).
 * [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino): Universeller Arduino-Sketch für **ESP32** (Pin GPIO 18, 19, 21).
 * [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Arduino-Sketch für **ESP8266** (NodeMCU / Wemos D1 Mini; Pin D5, D6, D7).
 * [`tools/flash_bekant.py`](tools/flash_bekant.py): High-Speed Python-Flasher mit 32-Wort-Zeilenspeicher und automatischer Verifikation.
