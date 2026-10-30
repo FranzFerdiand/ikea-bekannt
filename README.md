@@ -1,3 +1,5 @@
+[🇩🇪 Deutsch](README.md) | [🇬🇧 English](README.en.md)
+
 # IKEA Bekant Firmware-Mod mit ESP32 / ESP8266 & dynamischem Heizkörper-Schutz
 
 Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und Build-Skripte, um das originale IKEA Bekant Bedienteil (`PIC16LF1938`) **ohne teures Spezialgerät (wie PICkit)** mithilfe eines gewöhnlichen **ESP32 oder ESP8266 als 3,3V ICSP-Programmer** mit einer Memory- & Kollisionsschutz-Firmware zu flashen.
@@ -24,11 +26,12 @@ Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und 
 * [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Arduino-Sketch für **ESP8266** (NodeMCU / Wemos D1 Mini; Pin D5, D6, D7).
 * [`tools/flash_bekant.py`](tools/flash_bekant.py): High-Speed Python-Flasher mit 32-Wort-Zeilenspeicher und automatischer Verifikation.
 * [`tools/check_diag.py`](tools/check_diag.py): Diagnose-Skript zum Auslesen von Device ID, CONFIG1, CONFIG2 und Reset-Vektoren.
-* [`firmware/`](firmware/): Quellcode der Bekant-Firmware:
+* [`firmware/`](firmware/): Quellcode und technische Dokumentation der Bekant-Firmware:
   * [`src/bekant/radiator_config.h`](firmware/src/bekant/radiator_config.h): Konfiguration von Minimalgrenzen, Bremsreserve und Unlock-Toleranz.
   * [`src/bekant/bui.c`](firmware/src/bekant/bui.c): UI-Logik, Gesten, dynamischer EEPROM-Speicher und Relais-Rückmeldung.
   * [`src/bekant/bctrl.c`](firmware/src/bekant/bctrl.c): LIN-Bus Steuerung und Bremssequenz (`0x87 -> 0x84 -> 0xFC`).
   * [`src/configuration_bits.c`](firmware/src/configuration_bits.c): PIC-Fuses mit `LVP = ON` und `FOSC = INTOSC`.
+  * [`docs/`](firmware/docs/): Weiterführende technische Analysen (Architektur, Gesten-Vergleich, Endstopp-Analyse, State-Machine-Traces).
 * [`.github/workflows/build.yml`](.github/workflows/build.yml): Automatische Cloud-Kompilierung via GitHub Actions.
 
 ---
@@ -123,6 +126,24 @@ python tools/check_diag.py COM12
 | **Limit nach OBEN korrigieren** | Einfach auf die neue, höhere Position fahren $\rightarrow$ **3 Sekunden beide Tasten halten**. |
 | **Limit nach UNTEN korrigieren (Unlock am Anschlag)** | 1. Ganz nach unten bis zum automatischen Stopp am aktuellen Limit fahren.<br>2. Direkt am Stopp **3 Sekunden beide Tasten halten** (Relais klickt: Limit ist temporär entsperrt).<br>3. Mit `▼` vorsichtig tiefer auf die neue Höhe fahren.<br>4. Erneut **3 Sekunden beide Tasten halten** (neues Limit ist fest gespeichert). |
 | **Werkseinstellungen wiederherstellen** | Beide Tasten für **8 Sekunden** gedrückt halten (alle Speicherpositionen im EEPROM werden gelöscht). |
+
+---
+
+## 💡 Ergonomie-Guide: Die optimale Steh- und Sitzposition finden
+
+Ein elektrisch höhenverstellbarer Schreibtisch entfaltet seinen vollen Nutzen erst, wenn die gespeicherten Positionen anatomisch exakt zu deinem Körper passen.
+
+### In 4 Schritten die optimale Stehposition finden:
+1. **Alltägliches Schuhwerk tragen:** Zieh die Schuhe an, die du üblicherweise am Schreibtisch trägst (oder bleib auf Socken, falls du barfuß/auf Socken arbeitest; Sohlen machen oft 2 bis 3 cm Unterschied).
+2. **Natürliche Haltung einnehmen:** Stell dich aufrecht vor den Tisch, lass die Schultern ganz locker nach unten fallen (nicht nach oben ziehen) und winkle die Unterarme um ca. 90° bis maximal 100° an (die Hände dürfen ganz leicht nach unten zeigen).
+3. **Ellenbogenhöhe abgleichen:** Fahr den Tisch so weit nach oben, dass die Tischplatten-Oberkante genau auf Höhe deiner Unterarme bzw. leicht darunter liegt. Wenn deine Hände auf der Tastatur oder Maus liegen, sollten deine Handgelenke gerade bleiben und die Ellenbogen weder nach oben gedrückt noch in der Luft hängend nach unten gezogen werden.
+4. **Bildschirm ausrichten:** Die oberste Text- bzw. Bildzeile des Monitors sollte sich etwa auf Augenhöhe oder leicht darunter befinden, sodass der Kopf leicht (ca. 15–20°) nach unten geneigt ist.
+
+### In 4 Schritten die optimale Sitzposition finden:
+1. **Bürostuhl & Beinhaltung justieren:** Setz dich ganz nach hinten an die Stuhllehne. Die Füße stehen flach und entspannt auf dem Boden. Der Kniewinkel beträgt ca. 90° bis 100°, und zwischen Kniekehle und Sitzvorderkante bleibt etwa eine Handbreit Platz (verhindert das Abklemmen der Blutzirkulation).
+2. **Aufrechte Sitzhaltung einnehmen:** Becken leicht aufrichten, Rücken an die Lordosenstütze anlehnen. Die Schultern bewusst entspannen und locker nach unten hängen lassen.
+3. **Tischhöhe an die Ellenbogen anpassen:** Fahr den Bekant-Tisch so ein, dass deine locker herabhängenden Arme einen 90°-Winkel im Ellenbogen bilden und die Unterarme waagerecht auf der Tischplatte aufliegen. Die Schultern dürfen nicht nach oben gedrückt werden. *(Grundregel: Immer erst den Stuhl auf den Körper einstellen – danach den Schreibtisch auf die Sitzhöhe abstimmen!)*
+4. **Monitor & Sehabstand ausrichten:** Monitor etwa eine Armlänge (ca. 50–70 cm) entfernt platzieren. Die oberste Bildzeile befindet sich auf oder leicht unterhalb der Augenhöhe, damit Nacken und Halswirbelsäule dauerhaft entspannt bleiben.
 
 ---
 

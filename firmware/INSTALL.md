@@ -1,6 +1,9 @@
-# Building and uploading
+# Building and uploading (Legacy PICkit Guide)
 
-These instructions assume a macOS/Linux host, an PICkit 3 programmer, and a
+> [!NOTE]
+> **Recommended Flashing Method:** If you do not own a PICkit programmer, use the modern, solderless **ESP32 or ESP8266 flasher** documented in the main [README.md](../README.md) (or [README.en.md](../README.en.md)). The instructions below are for users flashing with a dedicated Microchip PICkit 2/3/4/5 hardware programmer.
+
+These instructions assume a macOS/Linux host, a PICkit 3 programmer, and a
 fresh out-of-the-box BEKANT controller that you are about to overwrite.
 
 **Flashing the firmware is irreversible without a backup of the original

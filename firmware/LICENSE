@@ -46,8 +46,8 @@ best-effort C reconstruction by the author; the original OEM binary
 (orginafirm.hex) was contributed by community members and is shipped
 in oem_reconstruction/disassembly/ for reference only.
 
-The file src/README-ORIGINAL.md is a verbatim historical copy of
-ivanwick's README retained for provenance.
+Ivanwick's original project and documentation are available at
+https://github.com/ivanwick/bekantfirmware.
 
 The Microchip PIC12-16F1xxx DFP (dfp/pic12-16f1xxx/) and XC8 compiler
 are Microchip products; see the upstream Microchip licenses at
