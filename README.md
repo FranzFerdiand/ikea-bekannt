@@ -22,7 +22,7 @@ Dieses Repository enthält den kompletten Quellcode, alle Programmier-Tools und 
 ## 📁 Repository-Struktur
 
 * [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Fertig kompilierte Firmware** (Standard: ca. 73 cm Heizkörperschutz, dynamisch per EEPROM anpassbar, `LVP = ON`).
-* [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino): Universeller Arduino-Sketch für **ESP32** (Pin GPIO 18, 19, 21).
+* [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino): Universeller Arduino-Sketch für **ESP32** (Pin GPIO 18, 19, 21).
 * [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Arduino-Sketch für **ESP8266** (NodeMCU / Wemos D1 Mini; Pin D5, D6, D7).
 * [`tools/flash_bekant.py`](tools/flash_bekant.py): High-Speed Python-Flasher mit 32-Wort-Zeilenspeicher und automatischer Verifikation.
 * [`tools/check_diag.py`](tools/check_diag.py): Diagnose-Skript zum Auslesen von Device ID, CONFIG1, CONFIG2 und Reset-Vektoren.
@@ -71,7 +71,7 @@ Mit einer gewöhnlichen **9V-Blockbatterie** lässt sich diese Sperre in Sekunde
 
 ### Schritt 1: ESP-Programmer flashen
 1. Öffne die Arduino IDE.
-2. Lade [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino) (für ESP32) bzw. [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (für ESP8266).
+2. Lade [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) (für ESP32) bzw. [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (für ESP8266).
 3. Flashe den Sketch auf deinen ESP.
 
 ### Schritt 2: Firmware flashen

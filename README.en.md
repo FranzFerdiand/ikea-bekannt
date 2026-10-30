@@ -22,7 +22,7 @@ This repository contains the complete source code, programmer tools, and build s
 ## 📁 Repository Structure
 
 * [`bin/bekantfirmware.hex`](bin/bekantfirmware.hex): **Precompiled binary** (default: ~73 cm radiator collision limit, dynamically adjustable via EEPROM, `LVP = ON`).
-* [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino): Universal Arduino sketch for **ESP32** (pins GPIO 18, 19, 21).
+* [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino): Universal Arduino sketch for **ESP32** (pins GPIO 18, 19, 21).
 * [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino): Arduino sketch for **ESP8266** (NodeMCU / Wemos D1 Mini; pins D5, D6, D7).
 * [`tools/flash_bekant.py`](tools/flash_bekant.py): High-speed Python flasher with 32-word row buffering and automatic readback verification.
 * [`tools/check_diag.py`](tools/check_diag.py): Diagnostic utility to read Device ID, CONFIG1, CONFIG2, and reset vectors.
@@ -71,7 +71,7 @@ A standard **9V alkaline battery** solves this in seconds without expensive prog
 
 ### Step 1: Program the ESP
 1. Open the Arduino IDE.
-2. Open [`tools/esp32_programmer/esp32_pic_programmer.ino`](tools/esp32_programmer/esp32_pic_programmer.ino) (ESP32) or [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (ESP8266).
+2. Open [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) (ESP32) or [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (ESP8266).
 3. Upload the sketch to your board.
 
 ### Step 2: Flash the Bekant Firmware
