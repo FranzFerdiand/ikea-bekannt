@@ -72,9 +72,28 @@ A standard **9V alkaline battery** solves this in seconds without expensive prog
 ## 🚀 Step-by-Step Flashing Guide
 
 ### Step 1: Program the ESP
-1. Open the Arduino IDE.
-2. Open [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) (ESP32) or [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (ESP8266).
-3. Upload the sketch to your board.
+You have two simple options to prepare your ESP:
+
+#### Option A: Flash Precompiled Binary (No Arduino IDE Needed)
+Use an in-browser Web Flasher (Chrome, Edge, or Opera):
+1. Open the official [Espressif Web Flasher (esptool-js)](https://espressif.github.io/esptool-js/) or [Adafruit WebSerial ESPTool](https://adafruit.github.io/Adafruit_WebSerial_ESPTool/).
+2. Connect your ESP via USB and click **Connect**.
+3. Select the appropriate binary from [`bin/`](bin/):
+   * **ESP8266 (NodeMCU / D1 Mini):** File [`bin/esp8266_programmer.bin`](bin/esp8266_programmer.bin) at offset `0x0000`.
+   * **ESP32 (Standard WROOM / DevKit):** File [`bin/esp32_programmer.bin`](bin/esp32_programmer.bin) at offset `0x10000`.
+4. Click **Program** – done!
+*(Alternatively via terminal: `python -m esptool --chip esp32 write_flash 0x10000 bin/esp32_programmer.bin`)*
+
+#### Option B: Compile via Arduino IDE (For All ESP Variants & Custom Pinouts)
+1. Open [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) or [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino).
+2. Select your board under *Tools > Board*.
+3. Click *Upload*.
+
+> [!NOTE]
+> **Compatibility with ESP32 Variants (WROOM vs. C3, S2, S3, H2):**
+> * The precompiled binary [`bin/esp32_programmer.bin`](bin/esp32_programmer.bin) is built specifically for classic **standard ESP32 modules (Xtensa LX6 Dual-Core / ESP-WROOM-32 / DevKit v1)** using pins GPIO 18, 19, 21.
+> * Other variants like **ESP32-C3 / C6 / H2** (RISC-V architecture) or **ESP32-S2 / S3** use different CPU cores and different GPIO layouts (GPIO 18/19 are often dedicated USB-JTAG).
+> * **If using a C3, S3, or H2:** Use **Option B** (Arduino IDE), select your board model, and adjust the 3 pin definitions at the top of the sketch to available free GPIOs on your specific board!
 
 ### Step 2: Flash the Bekant Firmware
 Wire the 5 lines to the disconnected controller and run on your computer:

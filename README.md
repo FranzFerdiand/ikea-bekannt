@@ -72,9 +72,29 @@ Mit einer gewöhnlichen **9V-Blockbatterie** lässt sich diese Sperre in Sekunde
 ## 🚀 Schritt-für-Schritt Anleitung
 
 ### Schritt 1: ESP-Programmer flashen
-1. Öffne die Arduino IDE.
-2. Lade [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) (für ESP32) bzw. [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino) (für ESP8266).
-3. Flashe den Sketch auf deinen ESP.
+
+Du hast zwei einfache Möglichkeiten, den ESP vorzubereiten:
+
+#### Option A: Fertige Binary flashen (ohne Arduino IDE)
+Nutze einen browserbasierten Web-Flasher (z. B. Chrome, Edge oder Opera):
+1. Öffne den offiziellen [Espressif Web Flasher (esptool-js)](https://espressif.github.io/esptool-js/) oder das [Adafruit WebSerial ESPTool](https://adafruit.github.io/Adafruit_WebSerial_ESPTool/).
+2. Verbinde deinen ESP per USB mit dem PC und klicke auf **Connect**.
+3. Wähle die passende Datei aus [`bin/`](bin/):
+   * **ESP8266 (NodeMCU / D1 Mini):** Datei [`bin/esp8266_programmer.bin`](bin/esp8266_programmer.bin) an Adresse `0x0000`.
+   * **ESP32 (Standard WROOM / DevKit):** Datei [`bin/esp32_programmer.bin`](bin/esp32_programmer.bin) an Adresse `0x10000`.
+4. Klicke auf **Program** – fertig!
+*(Alternativ via Terminal: `python -m esptool --chip esp32 write_flash 0x10000 bin/esp32_programmer.bin`)*
+
+#### Option B: Über Arduino IDE (für alle ESP-Varianten & Custom-Pins)
+1. Öffne [`tools/esp32_programmer/esp32_programmer.ino`](tools/esp32_programmer/esp32_programmer.ino) bzw. [`tools/esp8266_programmer/esp8266_programmer.ino`](tools/esp8266_programmer/esp8266_programmer.ino).
+2. Wähle dein spezifisches Board unter *Werkzeuge > Board* aus.
+3. Klicke auf *Upload*.
+
+> [!NOTE]
+> **Kompatibilität von ESP32-Varianten (WROOM vs. C3, S2, S3, H2):**
+> * Die fertige Binary [`bin/esp32_programmer.bin`](bin/esp32_programmer.bin) ist für den klassischen **Standard-ESP32 (Xtensa Dual-Core / ESP-WROOM-32 / DevKit v1)** mit Pins GPIO 18, 19, 21 kompiliert.
+> * Neuere Varianten wie **ESP32-C3 / C6 / H2** (RISC-V-Architektur) oder **ESP32-S2 / S3** besitzen andere Prozessorarchitekturen und andere Pin-Belegungen (GPIO 18/19 sind dort oft USB-JTAG).
+> * **Wenn du einen C3, S3 oder H2 nutzt:** Verwende **Option B** (Arduino IDE), wähle dein Board aus und passe ggf. die 3 Pin-Definitionen oben im Sketch an freie GPIOs deines Boards an!
 
 ### Schritt 2: Firmware flashen
 Verbinde die 5 Leitungen mit dem ausgesteckten Bedienteil und führe auf dem PC aus:
